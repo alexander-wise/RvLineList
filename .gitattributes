@@ -1,3 +1,4 @@
+*.ipac filter=lfs diff=lfs merge=lfs -text
 *.DS_Store filter=lfs diff=lfs merge=lfs -text
 *.gitignore filter=lfs diff=lfs merge=lfs -text
 *.json filter=lfs diff=lfs merge=lfs -text
@@ -6,7 +7,6 @@
 *.md filter=lfs diff=lfs merge=lfs -text
 *.jl filter=lfs diff=lfs merge=lfs -text
 *.mas filter=lfs diff=lfs merge=lfs -text
-*.ipac filter=lfs diff=lfs merge=lfs -text
 *.npy filter=lfs diff=lfs merge=lfs -text
 *.bib filter=lfs diff=lfs merge=lfs -text
 *.txt filter=lfs diff=lfs merge=lfs -text
