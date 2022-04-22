@@ -1,3 +1,17 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:1e15f9370cc1d46ad29df72fabe2560cc1899ae3ce48413e943cdfc69333893e
-size 554
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "julia",
+            "request": "launch",
+            "name": "Run active Julia file",
+            "program": "${file}",
+            "stopOnEntry": false,
+            "cwd": "${workspaceFolder}",
+            "juliaEnv": "${command:activeJuliaEnvironment}"
+        }
+    ]
+}
