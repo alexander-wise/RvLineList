@@ -87,6 +87,20 @@ end
 
 #generate empirical NEID mask
 
+#set up output directories
+if !isdir(joinpath(output_dir,"clean_masks"))
+   mkdir(joinpath(output_dir,"clean_masks"))
+end
+if !isdir(joinpath(output_dir,"VALD_masks"))
+   mkdir(joinpath(output_dir,"VALD_masks"))
+end
+if !isdir(joinpath(output_dir,"mask_bins"))
+   mkdir(joinpath(output_dir,"mask_bins"))
+end
+if !isdir(joinpath(output_dir,"linefinder"))
+   mkdir(joinpath(output_dir,"linefinder"))
+end
+
 pipeline_plan = RvLineList.PipelinePlan()
 RvLineList.RvSpectMLBase.Pipeline.save_data!(pipeline_plan, :fit_lines) #tell the pipeline plan to save the line fits
 
