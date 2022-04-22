@@ -203,8 +203,8 @@ def mask_intersection(mask1, mask2, default_data="first", add_label_column=False
                max_depth_match1 = matches1.loc[matches1["depth"].idxmax()]
                max_depth_match2 = matches2.loc[matches2["depth"].idxmax()]
                if combine_mask_data:
-                 for k in max_depth_match2.keys():
-                     if k not in max_depth_match1.keys():
+                 for k in mask2.keys():
+                     if k not in mask1.keys():
                         max_depth_match1[k] = max_depth_match2[k]
                sub_mask.append(max_depth_match1)
             else:

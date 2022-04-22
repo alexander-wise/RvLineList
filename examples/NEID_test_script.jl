@@ -82,7 +82,7 @@ end
 pipeline_plan = RvLineList.PipelinePlan()
 RvLineList.RvSpectMLBase.Pipeline.save_data!(pipeline_plan, :fit_lines) #tell the pipeline plan to save the line fits
 
-@time empirical_mask = generateEmpiricalMask(output_dir=output_dir) #TODO: figure out why I can't run this with eval(param.jl) statement commented out in empriical_line_lists.jl (note param file was loaded earlier into global scope) - this eval statement resets quant
+@time empirical_mask = generateEmpiricalMask(output_dir=output_dir, pipeline_plan=pipeline_plan) #TODO: figure out why I can't run this with eval(param.jl) statement commented out in empriical_line_lists.jl (note param file was loaded earlier into global scope) - this eval statement resets quant
 
 using PyCall
 try
@@ -100,7 +100,8 @@ import Pandas.DataFrame as pd_df
 
 empirical_mask_2col = select(empirical_mask,[:median_λc, :median_depth])
 rename!(empirical_mask_2col, [:lambda, :depth])
-# empirical_mask_2col = CSV.read(joinpath(output_dir,"RvLineList_species=all_depthcutoff=0.05_overlapcutoff=1.0e-5_allowBlends=0_badLineFilter=none_rejectTelluricSlope=0.0_nbin=1_DP=true_binParam=depth_n=0_VACUUM.csv"), DataFrame)
+#debug empirical_mask_2col = CSV.read(joinpath(output_dir,"RvLineList_species=all_depthcutoff=0.05_overlapcutoff=1.0e-5_allowBlends=0_badLineFilter=none_rejectTelluricSlope=0.0_nbin=1_DP=true_binParam=depth_n=0_VACUUM.csv"), DataFrame)
+#debug empirical_mask_2col = Dict(pairs(eachcol(empirical_mask_2col)))
 empirical_mask_pd = pd_df(empirical_mask_2col)
 
 combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
