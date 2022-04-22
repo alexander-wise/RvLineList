@@ -41,37 +41,37 @@ end
    parsed_args = parse_args(s)
 
 
-if parsed_args["allowBlends"] != nothing
+if parsed_args["allowBlends"] !== nothing
    println("Found command-line arg allowBlends. Overwriting param file definition of this arg.")
    global allowBlends = parsed_args["allowBlends"]
 end
 
-if parsed_args["overlap_cutoff"] != nothing
+if parsed_args["overlap_cutoff"] !== nothing
    println("Found command-line arg overlap_cutoff. Overwriting param file definition of this arg.")
    global overlap_cutoff = parsed_args["overlap_cutoff"]
 end
 
-if parsed_args["rejectTelluricSlope"] != nothing
+if parsed_args["rejectTelluricSlope"] !== nothing
    println("Found command-line arg rejectTelluricSlope. Overwriting param file definition of this arg.")
    global rejectTelluricSlope = parsed_args["rejectTelluricSlope"]
 end
 
-if parsed_args["badLineFilter"] != nothing
+if parsed_args["badLineFilter"] !== nothing
    println("Found command-line arg badLineFilter. Overwriting param file definition of this arg.")
    global badLineFilter = parsed_args["badLineFilter"]
 end
 
-if parsed_args["quant"] != nothing
+if parsed_args["quant"] !== nothing
    println("Found command-line arg quant. Overwriting param file definition of this arg.")
    global quant = parsed_args["quant"]
 end
 
-if parsed_args["nbin"] != nothing
+if parsed_args["nbin"] !== nothing
    println("Found command-line arg nbin. Overwriting param file definition of this arg.")
    global nbin = parsed_args["nbin"]
 end
 
-if parsed_args["output_dir"] != nothing
+if parsed_args["output_dir"] !== nothing
    println("Found command-line arg output_dir. Overwriting param file definition of this arg.")
    global output_dir = parsed_args["output_dir"]
 end
@@ -79,7 +79,10 @@ end
 
 #generate empirical NEID mask
 
-@time empirical_mask = generateEmpiricalMask() #TODO: figure out why I can't run this with eval(param.jl) statement commented out in empriical_line_lists.jl (note param file was loaded earlier into global scope) - this eval statement resets quant
+pipeline_plan = RvLineList.PipelinePlan()
+RvLineList.RvSpectMLBase.Pipeline.save_data!(pipeline_plan, :fit_lines) #tell the pipeline plan to save the line fits
+
+@time empirical_mask = generateEmpiricalMask(output_dir=output_dir) #TODO: figure out why I can't run this with eval(param.jl) statement commented out in empriical_line_lists.jl (note param file was loaded earlier into global scope) - this eval statement resets quant
 
 using PyCall
 try
@@ -89,15 +92,18 @@ catch e
    pyimport("pandas") #make sure pandas is installed
 end
 @pyinclude("src/make_VALD_line_list.py")
-@time VALD_mask = py"getVALDmasks"(overlap_cutoff=overlap_cutoff, depth_cutoff=depth_cutoff, iron1Only=iron1Only, badLineFilter=badLineFilter, allowBlends=allowBlends)[0]
+@time VALD_masks, VALD_masks_long = py"getVALDmasks"(overlap_cutoff=overlap_cutoff, depth_cutoff=depth_cutoff, iron1Only=iron1Only, badLineFilter=badLineFilter, allowBlends=allowBlends)
+VALD_mask = VALD_masks[0]
+VALD_mask_long = VALD_masks_long[0]
 
 import Pandas.DataFrame as pd_df
 
 empirical_mask_2col = select(empirical_mask,[:median_λc, :median_depth])
-rename!(empirical_mask_2col, [:wavelength, :depth])
+rename!(empirical_mask_2col, [:lambda, :depth])
+# empirical_mask_2col = CSV.read(joinpath(output_dir,"RvLineList_species=all_depthcutoff=0.05_overlapcutoff=1.0e-5_allowBlends=0_badLineFilter=none_rejectTelluricSlope=0.0_nbin=1_DP=true_binParam=depth_n=0_VACUUM.csv"), DataFrame)
 empirical_mask_pd = pd_df(empirical_mask_2col)
 
-combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask, threshold=500.0)
+combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
 
 function pd_df_to_df(df_pd)
    df = DataFrame()
@@ -115,9 +121,9 @@ mask = combined_mask_df[map(!,telluric_indices),:]
 
 mask.weight = mask.depth.^2
 
-#binned_masks = binMask(rename(mask,[:wavelength,:weight]), nbin, binParam=:weight)
+#binned_masks = binMask(rename(mask,[:lambda,:weight]), nbin, binParam=:weight)
 binned_masks = binMask(mask, nbin, binParam=binParam)
-#rename!(binned_masks[1], [:wavelength, :depth])
+#rename!(binned_masks[1], [:lambda, :depth])
 
 for bin_n in 1:nbin
    saveStr = "RvLineList" * "_allowBlends="*string(allowBlends) * "_overlapcutoff="*string(overlap_cutoff) * "_rejectTelluricSlope="*string(rejectTelluricSlope) * "_badLineFilter="*badLineFilter* "_quant="*quant * "_nbin="*string(nbin) * "_DP="*string(depthPercentile) * "_binParam="*string(binParam) * "_n="*string(bin_n) * "_VACUUM" * ".csv"

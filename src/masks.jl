@@ -2,36 +2,36 @@
 
 
 """ Read mask containing air wavelengths in csv format.
-   input: filename for mask with columns: `wavelength` in air and `depth`
+   input: filename for mask with columns: `lambda` in air and `depth`
    output: DataFrame containing the line wavlengths in vacuum and line depths
 """
 function read_mask_air(fn::String)
-    local df = CSV.read(fn,DataFrame,threaded=false,header=["wavelength","depth"])
-    @assert issorted(df[!,:wavelength])
-    df[!,:wavelength] .= λ_air_to_vac.(df[!,:wavelength]) #convert air to vacuum wavelength
+    local df = CSV.read(fn,DataFrame,threaded=false,header=["lambda","depth"])
+    @assert issorted(df[!,:lambda])
+    df[!,:lambda] .= λ_air_to_vac.(df[!,:lambda]) #convert air to vacuum wavelength
     return df
 end
 
 """ Read mask containing vacuum wavelengths in csv format.
-   input: filename for mask with columns: `wavelength` in vacuum and `depth`
+   input: filename for mask with columns: `lambda` in vacuum and `depth`
    output: DataFrame containing the line wavlengths in vacuum and line depths
 """
 function read_mask_vacuum(fn::String)
-    local df = CSV.read(fn,DataFrame,threaded=false,header=["wavelength","depth"])
-    @assert issorted(df[!,:wavelength])
+    local df = CSV.read(fn,DataFrame,threaded=false,header=["lambda","depth"])
+    @assert issorted(df[!,:lambda])
     return df
 end
 
 """ Read mask in csv format. Filename must include the substring _AIR" or "_VACUUM" denoting wavelengths medium
-   input: filename for mask with columns: `wavelength` in vacuum and `depth`
+   input: filename for mask with columns: `lambda` in vacuum and `depth`
    output: DataFrame containing the line wavlengths in vacuum and line depths
 """
 function read_mask(fn::String)
     @assert occursin("_VACUUM",fn) | occursin("_AIR",fn)
-    local df = CSV.read(fn,DataFrame,threaded=false,header=["wavelength","depth"])
-    @assert issorted(df[!,:wavelength])
+    local df = CSV.read(fn,DataFrame,threaded=false,header=["lambda","depth"])
+    @assert issorted(df[!,:lambda])
     if occursin("_AIR",fn)
-      df[!,:wavelength] .= λ_air_to_vac.(df[!,:wavelength]) #convert air to vacuum wavelength
+      df[!,:lambda] .= λ_air_to_vac.(df[!,:lambda]) #convert air to vacuum wavelength
     end
     return df
 end
@@ -67,7 +67,7 @@ function binMask(mask::DataFrame, nbin::Int; Inst::Module = EXPRES, orders_to_us
             end
         end
     end
-    return [sort(mask[bins[i],:], :wavelength) for i in 1:nbin]
+    return [sort(mask[bins[i],:], :lambda) for i in 1:nbin]
 end
 
 function get_param_range(mask::DataFrame, param::Symbol, param_min::Number, param_max::Number)

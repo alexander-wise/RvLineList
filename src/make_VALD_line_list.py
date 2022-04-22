@@ -23,13 +23,13 @@ outdir_bins = 'outputs/mask_bins' #stores useful data files when masks are split
 
 #load AlphaCenB VALD data:
 #load line species, wavelengths, excitation energies, oscillator strengths, and depths from VALD
-lineprops_K1 = pd.read_table(os.path.join(VALD_dir, 'VALD-AlphaCenB.txt'),delimiter=',',skiprows=3, skipfooter=98,usecols=(0,1,2,4,9), names=("species", "wavelength", "excitation_energy", "oscillator_strength", "depth"), engine="python")
+lineprops_K1 = pd.read_table(os.path.join(VALD_dir, 'VALD-AlphaCenB.txt'),delimiter=',',skiprows=3, skipfooter=98,usecols=(0,1,2,4,9), names=("species", "lambda", "excitation_energy", "oscillator_strength", "depth"), engine="python")
 
 #load solar VALD data:
-lineprops_G2 = pd.read_table(os.path.join(VALD_dir, 'VALD-Solar.txt'),delimiter=',',skiprows=3, skipfooter=106,usecols=(0,1,2,4,9), names=("species", "wavelength", "excitation_energy", "oscillator_strength", "depth"), engine="python")
+lineprops_G2 = pd.read_table(os.path.join(VALD_dir, 'VALD-Solar.txt'),delimiter=',',skiprows=3, skipfooter=106,usecols=(0,1,2,4,9), names=("species", "lambda", "excitation_energy", "oscillator_strength", "depth"), engine="python")
 
 #load VALD data for HD101501:
-lineprops_G8 = pd.read_table(os.path.join(VALD_dir, 'VALD-HD101501.txt'),delimiter=',',skiprows=3, skipfooter=109,usecols=(0,1,2,4,9), names=("species", "wavelength", "excitation_energy", "oscillator_strength", "depth"), engine="python")
+lineprops_G8 = pd.read_table(os.path.join(VALD_dir, 'VALD-HD101501.txt'),delimiter=',',skiprows=3, skipfooter=109,usecols=(0,1,2,4,9), names=("species", "lambda", "excitation_energy", "oscillator_strength", "depth"), engine="python")
 
 #################### BASIC FUNCTIONS AND ARRAY MANIPULATIONS ####################
 
@@ -63,17 +63,17 @@ def wave_equal(w1, w2, threshold=50.0):
 #take the union of two masks (pandas 2d dataframes) to generate one super_mask
 def mask_union(mask1, mask2, default_data="first", keep_all_mask1=False, add_label_column=False, threshold=50.0):
    """
-   Take the union of two masks to generate one supermask. By default, two mask entries are treated as equal if they have wavelengths within threshold (50 m/s by default) of each other, or if they are both equal to the same third mask entry.
+   Take the union of two masks to generate one supermask. By default, two mask entries are treated as equal if they have wavelengths (lambdas) within threshold (50 m/s by default) of each other, or if they are both equal to the same third mask entry.
 
    Parameters:
-      mask1 (2-D pandas.Datafrmae): mask #1 including columns for wavelength (required) and depth (required if default_data="max_depth")
+      mask1 (2-D pandas.Datafrmae): mask #1 including columns for lambda (required) and depth (required if default_data="max_depth")
 
-      mask2 (2-D pandas.Datafrmae): mask #2 including columns for wavelength (required) and depth (required if default_data="max_depth")
+      mask2 (2-D pandas.Datafrmae): mask #2 including columns for lambda (required) and depth (required if default_data="max_depth")
 
       default_data (str): keyword for which mask data to preserve in the case of discarding duplicate lines.
          Posible values:
             "first" defaults to mask1's data for matches across masks. Will default to max_depth for matches within masks.
-            "max_depth" picks the line with max depth in the case of a match. If multiple lines with the same max depth, defaults to the lower wavelength line within the match.
+            "max_depth" picks the line with max depth in the case of a match. If multiple lines with the same max depth, defaults to the lower lambda line within the match.
 
       keep_all_mask1 (bool): whether or not to preserve all mask1 entries in the output. This would mean only mask2 entries have the possibility to be thrown away because they match with another mask entry.
 
@@ -82,7 +82,7 @@ def mask_union(mask1, mask2, default_data="first", keep_all_mask1=False, add_lab
       threshold (float): velocity (in m/s) separation between adjacent mask entries for them to be considered equal.
 
    Returns:
-      super_mask (2-D pandas.Dataframe): union of mask1 and mask2, sorted by wavelength
+      super_mask (2-D pandas.Dataframe): union of mask1 and mask2, sorted by lambda
    """
    mask1 = pd.DataFrame(mask1)
    mask2 = pd.DataFrame(mask2)
@@ -91,21 +91,21 @@ def mask_union(mask1, mask2, default_data="first", keep_all_mask1=False, add_lab
    s2 = len(mask2.shape)
    assert s1 == s2, "ERROR: mask inputs have different shapes."
    assert s1 == 2, "ERROR: mask inputs must be 2-D pandas.Dataframes."
-   assert ("wavelength" in mask1.columns) and ("wavelength" in mask2.columns), "ERROR: wavelength column not found."
+   assert ("lambda" in mask1.columns) and ("lambda" in mask2.columns), "ERROR: lambda column not found."
    if ("depth" in mask1.columns) and ("depth" in mask2.columns):
       hasDepths=True
    else:
       assert default_data != "max_depth", "ERROR: max_depth selected but depth keyword missing from mask1.columns or mask2.columns."
       #assert union_within_masks == False, "ERROR: union_within_masks=True but depth keyword missing from mask1.columns or mask2.columns. Unable to decide which entry to pick for combined matches within mask."
       hasDepths=False
-   mask1sorted = mask1.sort_values(by="wavelength", ignore_index=True)
-   mask2sorted = mask2.sort_values(by="wavelength", ignore_index=True)
+   mask1sorted = mask1.sort_values(by="lambda", ignore_index=True)
+   mask2sorted = mask2.sort_values(by="lambda", ignore_index=True)
    mask1sorted["mask_df_name"] = "mask1"
    mask2sorted["mask_df_name"] = "mask2"
    super_mask = []
    mask12combined = pd.concat([mask1sorted,mask2sorted], ignore_index=True)
-   mask12sorted = mask12combined.sort_values(by="wavelength", ignore_index=True)
-   m12 = mask12sorted["wavelength"]
+   mask12sorted = mask12combined.sort_values(by="lambda", ignore_index=True)
+   m12 = mask12sorted["lambda"]
    i=0
    while i < (len(m12)-1): #loop through combined mask index i
       j=1
@@ -136,30 +136,32 @@ def mask_union(mask1, mask2, default_data="first", keep_all_mask1=False, add_lab
    super_mask_out = pd.DataFrame(data=super_mask)#,columns=mask12sorted.columns)
    if not add_label_column:
       super_mask_out = super_mask_out.drop(columns="mask_df_name")
-   return super_mask_out.sort_values(by="wavelength", ignore_index=True)	
+   return super_mask_out.sort_values(by="lambda", ignore_index=True)	
 
 
 #take the intersection of two masks (pandas 2d dataframes) to generate one sub_mask
-def mask_intersection(mask1, mask2, default_data="first", add_label_column=False, threshold=50.0):
+def mask_intersection(mask1, mask2, default_data="first", add_label_column=False, combine_mask_data=True, threshold=50.0):
    """
-   Take the intersection of two masks to generate one submask. Two mask entries are treated as equal if they have wavelengths within threshold (50 m/s by default) of each other, or if they are both equal to the same third mask entry.
+   Take the intersection of two masks to generate one submask. Two mask entries are treated as equal if they have wavelengths (lambdas) within threshold (50 m/s by default) of each other, or if they are both equal to the same third mask entry.
 
    Parameters:
-      mask1 (2-D pandas.Datafrmae): mask #1 including columns for wavelength (required) and depth (required if default_data="max_depth")
+      mask1 (2-D pandas.Datafrmae): mask #1 including columns for lambda (required) and depth (required if default_data="max_depth")
 
-      mask2 (2-D pandas.Datafrmae): mask #2 including columns for wavelength (required) and depth (required if default_data="max_depth")
+      mask2 (2-D pandas.Datafrmae): mask #2 including columns for lambda (required) and depth (required if default_data="max_depth")
 
       default_data (str): keyword for which mask data to preserve in the case of matching (intersecting) lines - all but one are discarded.
          Posible values:
             "first" defaults to mask1's data for matches across masks. Will default to max_depth for matches within masks.
-            "max_depth" picks the line with max depth in the case of a match. If multiple lines with the same max depth, defaults to the lower wavelength line within the match.
+            "max_depth" picks the line with max depth in the case of a match. If multiple lines with the same max depth, defaults to the lower lambda line within the match.
 
       add_label_column (bool): whether or not to add a column, "mask_df_name", to the output supermask containing labels "mask1" and "mask2" tracking which input mask each output mask entry originated from.
+
+      combine_mask_data (bool): whether or not to add extra data in mask2 to mask1 (only works when default_data=="first")
 
       threshold (float): velocity (in m/s) separation between adjacent mask entries for them to be considered equal.
 
    Returns:
-      sub_mask (2-D pandas.Dataframe): intersection of mask1 and mask2, sorted by wavelength
+      sub_mask (2-D pandas.Dataframe): intersection of mask1 and mask2, sorted by lambda
    """
    mask1 = pd.DataFrame(mask1)
    mask2 = pd.DataFrame(mask2)
@@ -168,21 +170,21 @@ def mask_intersection(mask1, mask2, default_data="first", add_label_column=False
    s2 = len(mask2.shape)
    assert s1 == s2, "ERROR: mask inputs have different shapes."
    assert s1 == 2, "ERROR: mask inputs must be 2-D pandas.Dataframes."
-   assert ("wavelength" in mask1.columns) and ("wavelength" in mask2.columns), "ERROR: wavelength column not found."
+   assert ("lambda" in mask1.columns) and ("lambda" in mask2.columns), "ERROR: lambda column not found."
    if ("depth" in mask1.columns) and ("depth" in mask2.columns):
       hasDepths=True
    else:
       assert default_data != "max_depth", "ERROR: max_depth selected but depth keyword missing from mask1.columns or mask2.columns."
       #assert union_within_masks == False, "ERROR: union_within_masks=True but depth keyword missing from mask1.columns or mask2.columns. Unable to decide which entry to pick for combined matches within mask."
       hasDepths=False
-   mask1sorted = mask1.sort_values(by="wavelength", ignore_index=True)
-   mask2sorted = mask2.sort_values(by="wavelength", ignore_index=True)
+   mask1sorted = mask1.sort_values(by="lambda", ignore_index=True)
+   mask2sorted = mask2.sort_values(by="lambda", ignore_index=True)
    mask1sorted["mask_df_name"] = "mask1"
    mask2sorted["mask_df_name"] = "mask2"
    sub_mask = []
    mask12combined = pd.concat([mask1sorted,mask2sorted], ignore_index=True)
-   mask12sorted = mask12combined.sort_values(by="wavelength", ignore_index=True)
-   m12 = mask12sorted["wavelength"]
+   mask12sorted = mask12combined.sort_values(by="lambda", ignore_index=True)
+   m12 = mask12sorted["lambda"]
    i=0
    while i < (len(m12)-1): #loop through combined mask index i
       j=1
@@ -196,14 +198,23 @@ def mask_intersection(mask1, mask2, default_data="first", add_label_column=False
          mask2matches = matches["mask_df_name"] == "mask2"
          if (any(mask1matches) and any(mask2matches)):
             if default_data == "first":
-               matches = matches.loc[matches.index[mask1matches]]
-            max_depth_match = matches.loc[matches["depth"].idxmax()]
-            sub_mask.append(max_depth_match)
+               matches1 = matches.loc[matches.index[mask1matches]]
+               matches2 = matches.loc[matches.index[mask2matches]]
+               max_depth_match1 = matches1.loc[matches1["depth"].idxmax()]
+               max_depth_match2 = matches2.loc[matches2["depth"].idxmax()]
+               if combine_mask_data:
+                 for k in max_depth_match2.keys():
+                     if k not in max_depth_match1.keys():
+                        max_depth_match1[k] = max_depth_match2[k]
+               sub_mask.append(max_depth_match1)
+            else:
+               max_depth_match = matches.loc[matches["depth"].idxmax()]
+               sub_mask.append(max_depth_match)
       i += j
    sub_mask_out = pd.DataFrame(data=sub_mask)#,columns=mask12sorted.columns)
    if not add_label_column:
       sub_mask_out = sub_mask_out.drop(columns="mask_df_name")
-   return sub_mask_out.sort_values(by="wavelength", ignore_index=True)	
+   return sub_mask_out.sort_values(by="lambda", ignore_index=True)	
 
 
 
@@ -217,7 +228,7 @@ def getBlends(mask0, overlap_cutoff, allowBlends):
    Find the number of mask entries which overlap with each mask entry, and construct a boolean array telling is which lines to keep based on the specified criteria in allowBlends.
 
    Parameters:
-      mask0 (pandas.DataFrame): line list which must contain fields "wavelength" and "depth"
+      mask0 (pandas.DataFrame): line list which must contain fields "lambda" and "depth"
 
       overlap_cutoff (float): distance from a line center at which another line's center would be considered within that line, expressed as a fraction fo the speed of light
 
@@ -227,7 +238,7 @@ def getBlends(mask0, overlap_cutoff, allowBlends):
    assert isinstance(mask0, pd.DataFrame)
    assert isinstance(overlap_cutoff, float)
    assert (isinstance(allowBlends, list) or isinstance(allowBlends, int) or isinstance(allowBlends, float))
-   maskCenters = mask0["wavelength"]
+   maskCenters = mask0["lambda"]
    nm = len(mask0)
    depths = mask0["depth"]
    widths = np.array([overlap_cutoff if (depths[i]<0.65) else (1.+(depths[i]-0.65)*4.)*overlap_cutoff for i in range(len(mask0))]) #note: this function is based on visual analysis of the plot of measured FWHM vs line depth from VALD made in measureBISandLW()
@@ -296,7 +307,7 @@ def getTelluricIndices(mask, maskWavelengthsAreVacuum, overlap_cutoff, vel_slope
    #shift to RV_offset
    telluric_waves = telluric_waves * (1+RV_offset/C_m_s)
    #compare mask line centers with telluric lines
-   maskCenters = mask["wavelength"]
+   maskCenters = mask["lambda"]
    too_close_to_telluric = np.zeros(len(mask),dtype=bool)
    for i in range(len(mask)):
       if (np.amin(abs(maskCenters[i]-telluric_waves)) / maskCenters[i]) < (overlap_cutoff+RV_range):
@@ -309,7 +320,7 @@ def getTelluricIndices(mask, maskWavelengthsAreVacuum, overlap_cutoff, vel_slope
 
 
 def hasMaskMatch(mask, maskWavelengthsAreVacuum, line_width=1e-5, mask_name='G2.espresso.mas', allowMultipleMatches=True):
-   maskCenters = mask["wavelength"]
+   maskCenters = mask["lambda"]
    if mask_name[-4:] == '.csv':
       print("Reading empirical line list for mask matching...")
       filterCenters = pd.read_csv(os.path.join(empirical_dir,mask_name))["median_λc"]
@@ -349,7 +360,7 @@ def hasMaskMatch(mask, maskWavelengthsAreVacuum, line_width=1e-5, mask_name='G2.
 
 #Use a VALD line list to make an RV line list. Note the output is converted to vacuum wavelengths by default.
 def getVALDmasks(nbin=1, binParam = "depth", lineprops=lineprops_G2, iron1Only='all', depthPercentile=True, overlap_cutoff=1e-5, depth_cutoff=0.05, maskWavelengths = 'Reiners', allowBlends=0, rejectTelluricSlope=0.0, badLineFilter='none', outputVacuumWavelengths=True, saveMasks=False):
-   #lineprops are wavelengths, excitation energies, oscillator strengths, and depths
+   #lineprops are lambdas, excitation energies, oscillator strengths, and depths
    """
    nbin=1
    binParam = "depth"
@@ -376,7 +387,7 @@ def getVALDmasks(nbin=1, binParam = "depth", lineprops=lineprops_G2, iron1Only='
    lineprops = lineprops.iloc[keep_indices]
 
    #start the mask from lineprops
-   mask0 = lineprops[["wavelength","depth"]].copy(deep=True)
+   mask0 = lineprops[["lambda","depth"]].copy(deep=True)
 
    #trim mask to only include non-overlapping lines - this happens before any other filtering, since other filters could remove part of a blend
    olisBoolean = getBlends(mask0, overlap_cutoff, allowBlends)[0]
@@ -389,8 +400,8 @@ def getVALDmasks(nbin=1, binParam = "depth", lineprops=lineprops_G2, iron1Only='
       coef_factor = coef_factors[maskWavelengths[7:]]
       reinersEQ2 = lambda d: coef_factor*(-504.891 - 43.7963*d - 145.56*d*d + 884.308*d*d*d) #Multiple of all the coefficients in reiners et al. 2016 for HD101501
       dVs = reinersEQ2(mask0["depth"]) + baseline_RVs[maskWavelengths[7:]]
-      mask0["wavelength"] = mask0["wavelength"] * (1.0+dVs/C_m_s)
-      lineprops["wavelength"] = lineprops["wavelength"] * (1.0+dVs/C_m_s)
+      mask0["lambda"] = mask0["lambda"] * (1.0+dVs/C_m_s)
+      lineprops["lambda"] = lineprops["lambda"] * (1.0+dVs/C_m_s)
 
    #only keep Fe 1 lines or all but Fe 1 lines:
    isFe1 = lineprops["species"]=="'Fe 1'"
@@ -436,11 +447,11 @@ def getVALDmasks(nbin=1, binParam = "depth", lineprops=lineprops_G2, iron1Only='
    #convert air to vacuum if necessary.
    if outputVacuumWavelengths != maskWavelengthsAreVacuum:
       if maskWavelengthsAreVacuum:
-            mask0["wavelength"] = airVacuumConversion(mask0["wavelength"], toAir=True)
-            lineprops["wavelength"] = airVacuumConversion(lineprops["wavelength"], toAir=True)
+            mask0["lambda"] = airVacuumConversion(mask0["lambda"], toAir=True)
+            lineprops["lambda"] = airVacuumConversion(lineprops["lambda"], toAir=True)
       else:
-            mask0["wavelength"] = airVacuumConversion(mask0["wavelength"], toAir=False)
-            lineprops["wavelength"] = airVacuumConversion(lineprops["wavelength"], toAir=False)
+            mask0["lambda"] = airVacuumConversion(mask0["lambda"], toAir=False)
+            lineprops["lambda"] = airVacuumConversion(lineprops["lambda"], toAir=False)
 
    #get line indices for each bin
    bins = {}
@@ -462,16 +473,20 @@ def getVALDmasks(nbin=1, binParam = "depth", lineprops=lineprops_G2, iron1Only='
          pupper = np.percentile(lineprops[binParam], 100./nbin * (i+1))
          bins[i] = np.where((lineprops[binParam] >= plower) & (lineprops[binParam] < pupper))[0]
 
-   #construct the masks using either the original or fitted wavelengths
+   #construct the masks using either the original or fitted lambdas
    masks = {}
+   masks_long = {}
    for i in range(nbin):
       masks[i] = mask0.iloc[bins[i]]
-      masks[i] = masks[i].iloc[np.argsort(masks[i]["wavelength"])]
+      masks_long[i] = lineprops.iloc[bins[i]]
+      masks[i] = masks[i].iloc[np.argsort(masks[i]["lambda"])] #sort masks by wavelength
+      masks_long[i] = masks_long[i].iloc[np.argsort(masks_long[i]["lambda"])] #sort masks by wavelength
       if saveMasks:
          saveStr = 'VALD'+('_nonDP' if not depthPercentile else '')+'_species='+iron1Only+'_depthcutoff='+str(depth_cutoff)+'_overlapcutoff='+str(overlap_cutoff)+'_allowBlends='+(','.join(str(j) for j in allowBlends) if isinstance(allowBlends,list) else str(allowBlends))+'_badLineFilter='+badLineFilter+'_rejectTelluricSlope='+str(rejectTelluricSlope)+'_waves='+maskWavelengths+'_nbin='+str(nbin) + '_binParam='+binParam +'_n='+ str(i) + ("_VACUUM" if outputVacuumWavelengths else "_AIR")
-         np.savetxt(os.path.join(outdir_masks, saveStr + '.mas'), masks[i].iloc[np.argsort(masks[i]["wavelength"])])
+         np.savetxt(os.path.join(outdir_masks, saveStr + '.mas'), masks[i])
+         np.savetxt(os.path.join(outdir_masks, saveStr + '_long.mas'), masks_long[i])
          np.save(os.path.join(outdir_bins, saveStr + '.npy'), lineprops[binParam].iloc[bins[i]])
-   return masks
+   return masks, masks_long
 
 
 

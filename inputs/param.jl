@@ -105,7 +105,7 @@ badLineFilter = "none" #which mask to use to filter out bad line - only lines wi
 rejectTelluricSlope = 0.0 #derivative of spectrum required for telluric line rejection - a value of 0 turns off telluric rejection
 nbin = 1 #number of mask subdivisions to make
 #bin_n = 1 #which subdivision to use - one is first
-binParam = :depth #which mask parameter to bin multiple masks by - only important for subdividing masks - can be :depth or :wavelength
+binParam = :depth #which mask parameter to bin multiple masks by - only important for subdividing masks - can be :depth or :lambda
 depthPercentile = true # if binning by depth, use sum of depths for bin weights
 
 
