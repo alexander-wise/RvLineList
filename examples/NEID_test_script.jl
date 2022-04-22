@@ -36,6 +36,9 @@ s = ArgParseSettings()
    "--output_dir"
       help = "directory to save mask outputs in"
       arg_type = String
+   "--VALD_output"
+      help = "whether or not to carry VALD line data through to the final mask"
+      arg_type = Bool
 end
 
    parsed_args = parse_args(s)
@@ -76,6 +79,11 @@ if parsed_args["output_dir"] !== nothing
    global output_dir = parsed_args["output_dir"]
 end
 
+if parsed_args["VALD_output"] !== nothing
+   println("Found command-line arg VALD_output. Overwriting param file definition of this arg.")
+   global VALD_output = parsed_args["VALD_output"]
+end
+
 
 #generate empirical NEID mask
 
@@ -104,7 +112,7 @@ rename!(empirical_mask_2col, [:lambda, :depth])
 #debug empirical_mask_2col = Dict(pairs(eachcol(empirical_mask_2col)))
 empirical_mask_pd = pd_df(empirical_mask_2col)
 
-combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
+combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_output ? VALD_mask_long : VALD_mask, threshold=500.0)
 
 function pd_df_to_df(df_pd)
    df = DataFrame()
@@ -120,15 +128,15 @@ telluric_indices = py"getTelluricIndices"(combined_mask, true, overlap_cutoff, v
 
 mask = combined_mask_df[map(!,telluric_indices),:]
 
-mask.weight = mask.depth.^2
+mask.weight = mask.depth
 
 #binned_masks = binMask(rename(mask,[:lambda,:weight]), nbin, binParam=:weight)
 binned_masks = binMask(mask, nbin, binParam=binParam)
 #rename!(binned_masks[1], [:lambda, :depth])
 
 for bin_n in 1:nbin
-   saveStr = "RvLineList" * "_allowBlends="*string(allowBlends) * "_overlapcutoff="*string(overlap_cutoff) * "_rejectTelluricSlope="*string(rejectTelluricSlope) * "_badLineFilter="*badLineFilter* "_quant="*quant * "_nbin="*string(nbin) * "_DP="*string(depthPercentile) * "_binParam="*string(binParam) * "_n="*string(bin_n) * "_VACUUM" * ".csv"
-   CSV.write(joinpath(output_dir,saveStr),binned_masks[bin_n])
+   saveStr = "RvLineList" * "_allowBlends="*string(allowBlends) * "_overlapcutoff="*string(overlap_cutoff) * "_rejectTelluricSlope="*string(rejectTelluricSlope) * "_badLineFilter="*badLineFilter* "_quant="*quant * "_nbin="*string(nbin) * "_DP="*string(depthPercentile) * "_binParam="*string(binParam) * "_n="*string(bin_n) * "_VALD_output="*string(VALD_output) * "_VACUUM" * ".csv"
+   CSV.write(joinpath(output_dir,"clean_masks",saveStr),binned_masks[bin_n])
 end
 
 #julia --project=RvSpectML/RvLineList RvSpectML/RvLineList/examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=1e-5 --rejectTelluricSlope=2000 --badLineFilter="none", --nbin=1 --output_dir="/home/awise/Desktop/neid_masks"
@@ -136,3 +144,5 @@ end
 #julia --project=RvSpectML/RvLineList RvSpectML/RvLineList/examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=2e-5 --rejectTelluricSlope=2000 --badLineFilter="none", --nbin=1 --output_dir="/home/awise/Desktop/neid_masks"
 
 #julia --project=RvSpectML/RvLineList RvSpectML/RvLineList/examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=1e-5 --rejectTelluricSlope=2000 --badLineFilter="ESPRESSOG2", --nbin=1 --output_dir="/home/awise/Desktop/neid_masks"
+
+#julia --project=RvSpectML/RvLineList RvSpectML/RvLineList/examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=2e-5 --rejectTelluricSlope=2000 --badLineFilter="ESPRESSOG2", --nbin=1 --output_dir="/home/awise/Desktop/neid_masks"

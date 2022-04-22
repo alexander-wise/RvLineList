@@ -104,8 +104,8 @@ function generateEmpiricalMask( ; output_dir::String="", pipeline_plan::Pipeline
       @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_in_template )
    
       if save_data(pipeline_plan,:fit_lines)
-         CSV.write(joinpath(output_dir,fits_target_str * "_linefinder_lines.csv"), lines_in_template )
-         CSV.write(joinpath(output_dir,fits_target_str * "_linefinder_line_fits.csv"), fits_to_lines )
+         CSV.write(joinpath(output_dir,"linefinder",fits_target_str * "_linefinder_lines.csv"), lines_in_template )
+         CSV.write(joinpath(output_dir,"linefinder",fits_target_str * "_linefinder_line_fits.csv"), fits_to_lines )
       end
    
       dont_need_to!(pipeline_plan,:fit_lines);

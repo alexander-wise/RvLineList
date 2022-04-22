@@ -359,7 +359,7 @@ def hasMaskMatch(mask, maskWavelengthsAreVacuum, line_width=1e-5, mask_name='G2.
 
 
 #Use a VALD line list to make an RV line list. Note the output is converted to vacuum wavelengths by default.
-def getVALDmasks(nbin=1, binParam = "depth", lineprops=lineprops_G2, iron1Only='all', depthPercentile=True, overlap_cutoff=1e-5, depth_cutoff=0.05, maskWavelengths = 'Reiners', allowBlends=0, rejectTelluricSlope=0.0, badLineFilter='none', outputVacuumWavelengths=True, saveMasks=False):
+def getVALDmasks(nbin=1, binParam = "depth", lineprops=lineprops_G2, iron1Only='all', depthPercentile=True, overlap_cutoff=1e-5, depth_cutoff=0.05, maskWavelengths = 'Reiners', allowBlends=0, rejectTelluricSlope=0.0, badLineFilter='none', outputVacuumWavelengths=True, saveMasks=False, outdir_masks = outdir_masks):
    #lineprops are lambdas, excitation energies, oscillator strengths, and depths
    """
    nbin=1

@@ -25,6 +25,7 @@ pipeline_output_path_afw5465 = "/gpfs/group/ebf11/default/ebf11/neid_solar/data/
 neid_data_path = "/gpfs/group/ebf11/default/ebf11/neid_solar/data/pipeline/v1.1/L2/"
 
 output_dir = joinpath(pwd(),"outputs")
+VALD_output=true #whether or not to carry VALD line data through to the final mask
 
 inst = NEID
 #target_subdir="101501"
@@ -102,7 +103,7 @@ overlap_cutoff = 1e-5 #distance between lines required for them to be categorize
 depth_cutoff=0.05
 iron1Only = "all" # which species to use - options are "Fe1", "nonFe1", "all"
 badLineFilter = "none" #which mask to use to filter out bad line - only lines within ~ 3 km/s of one of these mask lines will be kept
-rejectTelluricSlope = 0.0 #derivative of spectrum required for telluric line rejection - a value of 0 turns off telluric rejection
+rejectTelluricSlope = 2000.0 #derivative of spectrum required for telluric line rejection - a value of 0 turns off telluric rejection
 nbin = 1 #number of mask subdivisions to make
 #bin_n = 1 #which subdivision to use - one is first
 binParam = :depth #which mask parameter to bin multiple masks by - only important for subdividing masks - can be :depth or :lambda
