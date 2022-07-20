@@ -17,6 +17,7 @@ using Query #objects used: @filter
 using RvSpectMLBase #objects used: read_data_paths
 
 using EchelleInstruments #objects used: NEID, EXPRES, HARPSN
+#could use reexport to not have to use EchelleInstruments.function() for functions EchelleInstruments exports
 export NEID, EXPRES, HARPS, HARPSN
 
 import EchelleCCFs:λ_air_to_vac #objects used: EchelleCCFs.λ_air_to_vac
@@ -32,6 +33,8 @@ using Dates #objects used: Dates.date
 import Printf #objects used: @sprintf
 
 using Statistics #objects used: quantile
+
+using Interpolations #objects used: LinearInterpolation
 
 using PyCall #makes it possible to call python functions from make_VALD_line_list.py in a julia environment
 import Pandas.DataFrame as pd_df #used to convert julia DataFrame to python pandas.DataFrame

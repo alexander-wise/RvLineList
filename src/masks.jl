@@ -28,7 +28,7 @@ end
 """
 function read_mask(fn::String)
     @assert occursin("_VACUUM",fn) | occursin("_AIR",fn)
-    local df = CSV.read(fn,DataFrame,threaded=false,header=["lambda","depth"])
+    local df = CSV.read(fn,DataFrame,threaded=false,header=["lambda","depth", "weight"],skipto=2)
     @assert issorted(df[!,:lambda])
     if occursin("_AIR",fn)
       df[!,:lambda] .= λ_air_to_vac.(df[!,:lambda]) #convert air to vacuum wavelength

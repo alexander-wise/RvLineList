@@ -23,6 +23,7 @@ pipeline_output_path_afw5465 = "/gpfs/group/ebf11/default/ebf11/neid_solar/data/
 #pipeline_output_path_afw5465 = "/home/awise/data/neid/solar/"
 
 neid_data_path = "/gpfs/group/ebf11/default/ebf11/neid_solar/data/pipeline/v1.1/L2/"
+#neid_data_path = "/home/awise/data/neid/solar"
 
 output_dir = joinpath(pwd(),"outputs")
 VALD_output=true #whether or not to carry VALD line data through to the final mask
@@ -90,7 +91,7 @@ end
 #orders_to_use = 4:118 # all NEID orders with wavelength values
 orders_to_use = 17:115 # NEID orders with minimal NaNs in extracted orders from daily flux averages
 
-norm_type = :continuum #normalization type. Options: :raw, :continuum, :blaze
+norm_type = :continuum #normalization type. Options: :raw, :continuum, :blaze #TODO: this param might not work
 
 
 

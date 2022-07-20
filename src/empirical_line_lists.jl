@@ -93,19 +93,24 @@ function generateEmpiricalMask( ; output_dir::String="", pipeline_plan::Pipeline
    if need_to(pipeline_plan,:fit_lines)
       if verbose println("# Performing fresh search for lines in template spectra.")  end
       cl = ChunkList(map(grid->ChunkOfSpectrum(spectral_orders_matrix.λ,f_mean, var_mean, grid), spectral_orders_matrix.chunk_map), ones(Int64,length(spectral_orders_matrix.chunk_map)))
+      cl_derivs = ChunkList(map(grid->ChunkOfSpectrum(spectral_orders_matrix.λ, deriv, deriv2, grid), spectral_orders_matrix.chunk_map), ones(Int64,length(spectral_orders_matrix.chunk_map)))
+      template_linear_interp = map(chid -> Interpolations.LinearInterpolation(cl[chid].λ,cl[chid].flux,extrapolation_bc=Flat()), 1:length(cl))
+      template_deriv_linear_interp = map(chid -> Interpolations.LinearInterpolation(cl_derivs[chid].λ,cl_derivs[chid].flux,extrapolation_bc=Flat()), 1:length(cl_derivs))
       # We're done with the spectral_orders_matrix, so we can release the memory now
-      #spectral_orders_matrix = nothing
-      #GC.gc()
+      spectral_orders_matrix = nothing
+      GC.gc()
       need_to!(pipeline_plan,:template)
       #lines_in_template_logy = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=line_width_50,min_deriv2=0.5, use_logλ=true, use_logflux=true), verbose=false)  # TODO: Automate threshold for finding a line
       lines_in_template = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=line_width_50,min_deriv2=0.5, use_logλ=true, use_logflux=false), verbose=false)  # TODO: Automate threshold for finding a line
    
       if verbose println("# Finding above lines in all spectra.")  end
       @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_in_template )
+      @time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_in_template )
    
       if save_data(pipeline_plan,:fit_lines)
          CSV.write(joinpath(output_dir,"linefinder",fits_target_str * "_linefinder_lines.csv"), lines_in_template )
          CSV.write(joinpath(output_dir,"linefinder",fits_target_str * "_linefinder_line_fits.csv"), fits_to_lines )
+         CSV.write(joinpath(output_dir,"linefinder",fits_target_str * "_linefinder_line_RVs.csv"), line_RVs )
       end
    
       dont_need_to!(pipeline_plan,:fit_lines);
@@ -206,3 +211,167 @@ end
 
 
 
+
+
+
+function fit_all_line_RVs_in_chunklist_timeseries(clt::AbstractChunkListTimeseries, template, template_deriv, lines::DataFrame)
+   @assert size(lines,1) >= 2
+   line_idx::Int64 = 1
+   λmin = lines[line_idx,:fit_min_λ]
+   λmax = lines[line_idx,:fit_max_λ]
+   chid = lines[line_idx,:chunk_id]
+   df = fit_line_RVs_in_chunklist_timeseries(clt, template, template_deriv, λmin, λmax, chid)
+   df[!,:line_id] .= line_idx
+   for line_idx in 2:size(lines,1)
+     λmin = lines[line_idx,:fit_min_λ]
+     λmax = lines[line_idx,:fit_max_λ]
+     chid = lines[line_idx,:chunk_id]
+     df_tmp = fit_line_RVs_in_chunklist_timeseries(clt, template, template_deriv, λmin, λmax, chid)
+     df_tmp[!,:line_id] .= line_idx
+     append!(df,df_tmp)
+   end
+   return df
+ end
+
+ 
+
+""" `fit_line_in_chunklist_timeseries( chunk_list_timeseries, λmin, λmax, chunk_index)`
+Return DataFrame with results of fits to each line in a given chunk of chunk_list_timeseries (including each observation time)
+Inputs:
+- chunk_list_timeseries: Data to fit
+- template: high SNR data template
+- λmin
+- λmax
+- chunk_index:  Restricts fitting to specified chunk
+Outputs a DataFrame with keys:
+- fit_z: doppler factor for line fit
+- fit_covar: Covariance matrix for fit parameters
+- χ²_per_dof: quality of fit to chunk
+- fit_converged: Bool indicating if `LsqFit` converged
+- obs_idx: index of observation in chunk_list_timeseries
+- chunk_id: index of chunk in chunk_list_timeseries
+- pixels: range of pixels that was fit
+"""
+function fit_line_RVs_in_chunklist_timeseries(clt::AbstractChunkListTimeseries, template, template_deriv, λmin::Real, λmax::Real, chid::Integer)
+  nobs = length(clt.chunk_list)
+  fit_z = Vector{Float64}(undef,nobs)
+  pixels = Vector{UnitRange{Int64}}(undef,nobs)
+  global count_msgs
+
+  for t in 1:nobs
+    pixels[t] = RvSpectMLBase.find_pixels_for_line_in_chunklist(clt.chunk_list[t], λmin, λmax, chid).pixels
+
+    mean_flux = mean(clt.chunk_list[t][chid].flux[pixels[t]])
+    flux = clt.chunk_list[t][chid].flux ./ mean_flux
+    var = clt.chunk_list[t][chid].var ./ mean_flux^2
+
+    mean_template_flux = mean(template[chid](clt.chunk_list[t][chid].λ)[pixels[t]])
+    template_flux = template[chid](clt.chunk_list[t][chid].λ) ./ mean_template_flux
+    deriv = template_deriv[chid](clt.chunk_list[t][chid].λ) ./ mean_template_flux #is this correct? to divide the derivative by the mean flux to normalize?
+
+    fit_z[t] = fit_line_RV(flux, var, template_flux, deriv, pixels[t])
+  end
+  return DataFrame(:fit_RV=>fit_z * C_m_s, :obs_idx =>collect(1:nobs), :chunk_id=>chid, :pixels=>pixels )
+end
+
+C_m_s = 2.99792458e8 #speed of light in m/s
+
+
+#propagate variance in this calculation to get z_err
+#have option to assume variance across line is constant (median across pixels)
+function fit_line_RV(flux::AbstractArray{T1,1}, var::AbstractArray{T2,1}, template_flux, deriv, idx::UnitRange) where { T1<:Real, T2<:Real }
+   @assert length(flux) == length(var) == length(template_flux) == length(deriv)
+
+   #z = deriv[idx] \ (flux[idx] - template_flux[idx]) #unweighted z
+   z = ((1/sqrt.(var[idx]))' .* deriv[idx]) \ ((1/sqrt.(var[idx]))' .* (flux[idx] - template_flux[idx])) #weighted z
+   """
+   scatter(flux[idx]-template_flux[idx],z*deriv[idx]) #visual check of the fit - should be a strong correlation here
+   xlabel!("data - linear_interp(template)")
+   ylabel!("z * d_template_d_z")
+
+   z1 = 1 / (deriv[idx]' * deriv[idx]) * (deriv[idx]' * (flux[idx] - template_flux[idx])) #this should be equal to unweighted z
+
+   z1 = dot(deriv[idx] .* (flux[idx] - template_flux[idx]), 1/var[idx]) / dot(deriv[idx] .* deriv[idx], 1/var[idx]) #this should be equal to weighted z
+
+   """
+
+   return z
+ end
+
+"""
+
+
+fits_to_lines = CSV.read(joinpath(output_dir,"masks/linefinder",fits_target_str * "_linefinder_line_fits.csv"), DataFrame )
+line_RVs = CSV.read(joinpath(output_dir,"masks/linefinder",fits_target_str * "_linefinder_line_RVs.csv"), DataFrame )
+lines_in_template = CSV.read(joinpath(output_dir,"masks/linefinder",fits_target_str * "_linefinder_lines.csv"), DataFrame )
+
+C_m_s = 2.99792458e8 #speed of light in m/s
+
+
+using RvLineList
+using Dates
+using Query
+using Plots
+using StatsBase
+
+days = Dates.dayofyear.(RvLineList.get_NEID_best_days())
+
+imax = size(lines_in_template)[1]
+
+idx = sample(mask[:,:line_id], 100, replace = false)
+
+for i in idx
+
+
+j=0
+
+
+
+j+=1
+i = idx[j]
+gaussian_fits = fits_to_lines |> @filter(_.line_id==i) |> DataFrame
+gaussian_fit_avg_center = mean(gaussian_fits[:,:fit_λc])
+gaussian_fit_RVs = (gaussian_fits[:,:fit_λc] .- gaussian_fit_avg_center) ./ gaussian_fit_avg_center .* C_m_s
+
+template_fits = line_RVs |> @filter(_.line_id==i) |> DataFrame
+template_fit_RVs = template_fits[:,:fit_RV] .- mean(template_fits[:,:fit_RV])
+line_id = template_fits[1,:line_id]
+mask_id = findfirst(i-> i==line_id,mask[:,:line_id])
+species1 = mask[mask_id,:species]
+
+scatter(days,gaussian_fit_RVs, label="gaussian fit")
+scatter!(days,template_fit_RVs,label="template fit")
+title!("species = " * string(species1) * ", wavelength = " * string(mask[mask_id,:lambda]))
+xlabel!("day of year in 2021")
+display(ylabel!("RV (m/s)"))
+
+chunk_id = gaussian_fits[1,:chunk_id]
+obs_ids = 75:85
+pixels = eval(Meta.parse(gaussian_fits[1,:pixels]))
+obs_id = obs_ids[1]
+
+λ_to_use = [order_list_timeseries[obs_id].data[chunk_id].λ[pixels] for obs_id in obs_ids]
+flux_to_use = [order_list_timeseries[obs_id].data[chunk_id].flux[pixels] for obs_id in obs_ids]
+mean_λ = [mean([λ_to_use[x][y] for x in 1:length(obs_ids)]) for y in 1:length(pixels)]
+mean_flux = [mean([flux_to_use[x][y] for x in 1:length(obs_ids)]) for y in 1:length(pixels)]
+
+
+plot(λ_to_use[1], flux_to_use[1] - mean_flux)
+for k in 2:length(obs_ids)
+   plot!(λ_to_use[k], flux_to_use[k] -  mean_flux)
+end
+display(ylabel!("flux"))
+
+#line id = 4960, check why its not symmetric, 
+#change output to file to not be PyObjects
+
+end
+
+i+=1
+
+scatter(template_fit_RVs,gaussian_fit_RVs)
+xlabel("template fit RV (m/s)")
+ylabel("gaussian fit RV (m/s)")
+
+i+=1
+"""
