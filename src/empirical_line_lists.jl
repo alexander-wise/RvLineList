@@ -196,7 +196,7 @@ function combine_NEID_daily_obs(params::Module, dates::Vector{Date})
    obs_flux = [obs[2] for obs in obs_lambda_flux_var]
    obs_var = [obs[3] for obs in obs_lambda_flux_var]
    obs_metadata = [Dict{Symbol,Any}(:date=>dates[i], :rv_est=>daily_rvs[i], :bjd=>datetime2julian(DateTime(Dates.year(dates[i]), Dates.month(dates[i]), Dates.day(dates[i]), 12))) for i in 1:length(dates)]
-   all_spectra = map(obs -> Spectra2DBasic(obs[1], obs[2], obs[3], NEID2D(), metadata=obs[4]), eachrow(hcat(obs_lambda,obs_flux,obs_var,obs_metadata))) #I think there's a better way to do this, perhaps by using obs_lambda_flux_var directly
+   all_spectra2 = map(obs -> Spectra2DBasic(obs[1], obs[2], obs[3], NEID2D(), metadata=obs[4]), zip(obs_lambda,obs_flux,obs_var,obs_metadata))
    return all_spectra
 end
 
