@@ -45,7 +45,7 @@ export read_mask_air, read_mask_vacuum, binMask
 export get_param_range, get_lambda_range, get_depth_range
 
 #normaliation of EXPRES spectra - this file will not be needed once these functions are replaced with working versions from EchelleInstruments
-include("expres_norm.jl")
+#include("expres_norm.jl")
 
 #empirical mask generation
 include("empirical_line_lists.jl")

@@ -6,7 +6,7 @@
 """ Generate an empirical mask by finding spectral lines, fiting them with gaussians with a linear offset, and filtering the fitted line params
 
 Inputs (must be defined in param.jl):
-   inst::Module - instrument used to collect the data. Works with: EXPRES
+   inst::Module - instrument used to collect the data. Works with: :expres, :neid
 
    data_path::String - string specifying the path to the data
 
@@ -52,9 +52,9 @@ function generateEmpiricalMask( ; output_dir::String="", pipeline_plan::Pipeline
    end
 
    if need_to(pipeline_plan,:read_spectra)
-      if inst == EXPRES
-         all_spectra = EXPRES_read_spectra(data_path)
-      elseif inst == NEID
+      if inst == :expres
+         all_spectra = EXPRES_read_spectra(data_path) #note this is in expres_old.jl and needs to be loaded manually for now
+      elseif inst == :neid
          all_spectra = combine_NEID_daily_obs(get_NEID_best_days(startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100))
       else
          print("Error: spectra failed to load; inst not supported.")
@@ -69,8 +69,8 @@ function generateEmpiricalMask( ; output_dir::String="", pipeline_plan::Pipeline
    order_list_timeseries = extract_orders(all_spectra, pipeline_plan, orders_to_use=orders_to_use, remove_bad_chunks=false, recalc=true);
 
    #remove nans from data before making template spectra - TODO: turn this into an interpolation or modify template construction to allow nans
-   for i in 1:length(order_list_timeseries)
-     for j in 1:length(order_list_timeseries[1])
+   for i in eachindex(order_list_timeseries)
+     for j in eachindex(order_list_timeseries[1])
        order_list_timeseries[i][j].flux[isnan.(order_list_timeseries[i][j].flux)] .= 1.0
      end
    end
@@ -120,25 +120,6 @@ function generateEmpiricalMask( ; output_dir::String="", pipeline_plan::Pipeline
 
 end #end function generateEmpiricalMask()
 
-#read spectra code for EXPRES data
-#TODO: move this somewhere else?
-function EXPRES_read_spectra(data_path::String; verbose::Bool=false)
-   if verbose println("# Finding what data files are avaliable.")  end
-   if isfile(joinpath(pipeline_output_path_afw5465,"manifest.csv"))
-      if verbose println("# Reading in manifest from manifest.csv") end
-      df_files  = CSV.read(joinpath(pipeline_output_path_afw5465,"manifest.csv"), DataFrame)
-      @assert size(df_files,1) >= 1
-      @assert hasproperty(df_files,:Filename)
-      @assert hasproperty(df_files,:bjd)
-   else
-      if verbose println("# Generating manifest file manifest.csv") end
-      df_files = inst.make_manifest(data_path, inst)
-      CSV.write(joinpath(pipeline_output_path_afw5465,"manifest.csv"), df_files)
-   end
-   df_files_use = df_files |> @take(max_spectra_to_use) |> DataFrame
-   if verbose println("# Reading in ", size(df_files_use,1), " FITS files.")  end
-   @time all_spectra = map(inst.read_data,eachrow(df_files_use))
-end
 
 
 #author: Eric Ford
@@ -175,10 +156,10 @@ end
 
 
 #generate function that finds 100 days between jan 1, 2021 and sept 30, 2021, with highest number of num_rvs.good according to summary_1.csv
-function get_NEID_best_days(; startDate::Date=Date(2021,01,01), endDate::Date=Date(2021,09,30), nBest::Int64=100)
+function get_NEID_best_days(; pipeline_output_summary_path::String=joinpath(pipeline_output_path_ebf11,"summary_1.csv"), startDate::Date=Date(2021,01,01), endDate::Date=Date(2021,09,30), nBest::Int64=100)
    @assert endDate > startDate
    #summary_1 = CSV.read("/home/awise/data/neid/solar/summary_1.csv", DataFrame)
-   summary_1 = CSV.read(joinpath(pipeline_output_path_ebf11,"summary_1.csv"), DataFrame)
+   summary_1 = CSV.read(pipeline_output_summary_path, DataFrame)
    summary_1_in_date_range = summary_1[(summary_1[!,"obs_date.string"] .>= startDate) .& (summary_1[!,"obs_date.string"] .<= endDate),:]
    indices = sort(reverse(sortperm(summary_1_in_date_range[!,"num_rvs.good"]))[1:nBest])
    NEID_best_days = summary_1_in_date_range[indices,:]
@@ -186,16 +167,20 @@ function get_NEID_best_days(; startDate::Date=Date(2021,01,01), endDate::Date=Da
    return NEID_best_days."obs_date.string"
 end
 
+#given a vector of dates, as well as filenames for ccf and manifest files, get a vector of all relevant file paths for these dates.
+function get_NEID_daily_obs_list_and_manifest_list(dates::Vector{Date}; pipeline_output_path=pipeline_output_path_ebf11, ccf_fn::String = "daily_ccfs_1.jld2", manifest_fn = "manifest.csv")
+   date_dirs = reduce.(joinpath,split.(Dates.format.(dates,ISODateFormat),"-"))
+   obs_list = joinpath.(pipeline_output_path,date_dirs,ccf_fn)
+   manifest_list = joinpath.(pipeline_output_path,date_dirs,manifest_fn)
+   return obs_list, manifest_list
+end
+
 #combine NEID clean daily mean spectra from daily_ccfs files into a vector of type Spectra2DBasic
 function combine_NEID_daily_obs(dates::Vector{Date})
-   date_dirs = reduce.(joinpath,split.(Dates.format.(dates,ISODateFormat),"-"))
-   obs_list = joinpath.(pipeline_output_path_ebf11,date_dirs,"daily_ccfs_1.jld2")
-   manifest_list = joinpath.(pipeline_output_path_ebf11,date_dirs,"manifest.csv")
-   #manifest_list = joinpath.(pipeline_output_path_ebf11,date_dirs,"manifest.csv")
-   #reduce(vcat,CSV.read.(manifest_list,DataFrame))
+   obs_list, manifest_list = get_NEID_daily_obs_list_and_manifest_list(dates)
    @time obs_lambda_flux_var = [getindex.(Ref(load(fn)),["mean_lambda", "mean_clean_flux_continuum_normalized", "mean_clean_var"]) for fn in obs_list]
    daily_rvs = zeros(length(manifest_list))
-   for i in 1:length(manifest_list)
+   for i in eachindex(manifest_list)
       manifest_i = CSV.read(manifest_list[i], DataFrame)
       index_minimum_hour_angle = argmin(abs.(manifest_i[:,"hour_angle"]))
       daily_rvs[i] = manifest_i[index_minimum_hour_angle,"ssbz"] * speed_of_light_mps
