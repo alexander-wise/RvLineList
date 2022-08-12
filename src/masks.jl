@@ -27,7 +27,7 @@ end
    output: DataFrame containing the line wavlengths in vacuum and line depths
 """
 function read_mask(fn::String)
-    @assert occursin("_VACUUM",fn) | occursin("_AIR",fn)
+    @assert occursin("_VACUUM",fn) || occursin("_AIR",fn)
     local df = CSV.read(fn,DataFrame,threaded=false,header=["lambda","depth", "weight"],skipto=2)
     @assert issorted(df[!,:lambda])
     if occursin("_AIR",fn)
