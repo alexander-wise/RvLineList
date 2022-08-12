@@ -46,7 +46,7 @@ function get_airVacString(inst::Symbol)
    return airVacString
 end
 
-function binMask(mask::DataFrame, nbin::Int; Inst::Module = EXPRES, orders_to_use::UnitRange{Int64} = 43:72, binParam::Symbol = :weight, depthPercentile::Bool = true)
+function binMask(mask::DataFrame, nbin::Int; binParam::Symbol = :weight, depthPercentile::Bool = true)
     bins = Dict()
     if depthPercentile #this should be updated to include blaze/normalization/some sort of SNR
         pSorted = sortperm(mask[:,binParam])

@@ -87,7 +87,8 @@ end
 #orders_to_use = 43:72 #EXPRES excalibur range
 #orders_to_use = sort(sample(43:72,10,replace=false)) #Ten random orders from the EXPRES excalibur range
 #order_to_use = 12:83 #EXPRES all useable orders
-#orders_to_use = orders_to_use_default(NEID2D())
+#orders_to_use = orders_to_use_default(NEID.NEID2D())
+#orders_to_use = orders_to_use_default(EXPRES.EXPRES2D())
 #orders_to_use = 4:118 # all NEID orders with wavelength values
 orders_to_use = 17:115 # NEID orders with minimal NaNs in extracted orders from daily flux averages
 
