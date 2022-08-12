@@ -46,65 +46,65 @@ end
 
 if parsed_args["allowBlends"] !== nothing
    println("Found command-line arg allowBlends. Overwriting param file definition of this arg.")
-   global allowBlends = parsed_args["allowBlends"]
+   Params.allowBlends[] = parsed_args["allowBlends"]
 end
 
 if parsed_args["overlap_cutoff"] !== nothing
    println("Found command-line arg overlap_cutoff. Overwriting param file definition of this arg.")
-   global overlap_cutoff = parsed_args["overlap_cutoff"]
+   Params.overlap_cutoff[] = parsed_args["overlap_cutoff"]
 end
 
 if parsed_args["rejectTelluricSlope"] !== nothing
    println("Found command-line arg rejectTelluricSlope. Overwriting param file definition of this arg.")
-   global rejectTelluricSlope = parsed_args["rejectTelluricSlope"]
+   Params.rejectTelluricSlope[] = parsed_args["rejectTelluricSlope"]
 end
 
 if parsed_args["badLineFilter"] !== nothing
    println("Found command-line arg badLineFilter. Overwriting param file definition of this arg.")
-   global badLineFilter = parsed_args["badLineFilter"]
+   Params.badLineFilter[] = parsed_args["badLineFilter"]
 end
 
 if parsed_args["quant"] !== nothing
    println("Found command-line arg quant. Overwriting param file definition of this arg.")
-   global quant = parsed_args["quant"]
+   Params.quant[] = parsed_args["quant"]
 end
 
 if parsed_args["nbin"] !== nothing
    println("Found command-line arg nbin. Overwriting param file definition of this arg.")
-   global nbin = parsed_args["nbin"]
+   Params.nbin[] = parsed_args["nbin"]
 end
 
 if parsed_args["output_dir"] !== nothing
    println("Found command-line arg output_dir. Overwriting param file definition of this arg.")
-   global output_dir = parsed_args["output_dir"]
+   Params.output_dir[] = parsed_args["output_dir"]
 end
 
 if parsed_args["VALD_output"] !== nothing
    println("Found command-line arg VALD_output. Overwriting param file definition of this arg.")
-   global VALD_output = parsed_args["VALD_output"]
+   Params.VALD_output[] = parsed_args["VALD_output"]
 end
 
 
 #generate empirical NEID mask
 
 #set up output directories
-if !isdir(joinpath(output_dir,"clean_masks"))
-   mkdir(joinpath(output_dir,"clean_masks"))
+if !isdir(joinpath(Params.output_dir[],"clean_masks"))
+   mkdir(joinpath(Params.output_dir[],"clean_masks"))
 end
-if !isdir(joinpath(output_dir,"VALD_masks"))
-   mkdir(joinpath(output_dir,"VALD_masks"))
+if !isdir(joinpath(Params.output_dir[],"VALD_masks"))
+   mkdir(joinpath(Params.output_dir[],"VALD_masks"))
 end
-if !isdir(joinpath(output_dir,"mask_bins"))
-   mkdir(joinpath(output_dir,"mask_bins"))
+if !isdir(joinpath(Params.output_dir[],"mask_bins"))
+   mkdir(joinpath(Params.output_dir[],"mask_bins"))
 end
-if !isdir(joinpath(output_dir,"linefinder"))
-   mkdir(joinpath(output_dir,"linefinder"))
+if !isdir(joinpath(Params.output_dir[],"linefinder"))
+   mkdir(joinpath(Params.output_dir[],"linefinder"))
 end
 
 pipeline_plan = RvLineList.PipelinePlan()
 RvLineList.RvSpectMLBase.Pipeline.save_data!(pipeline_plan, :fit_lines) #tell the pipeline plan to save the line fits
 
-@time empirical_mask = generateEmpiricalMask(output_dir=output_dir, pipeline_plan=pipeline_plan) #TODO: figure out why I can't run this with eval(param.jl) statement commented out in empriical_line_lists.jl (note param file was loaded earlier into global scope) - this eval statement resets quant
+@time empirical_mask = generateEmpiricalMask(Params, output_dir=Params.output_dir[], pipeline_plan=pipeline_plan)
 
 using PyCall
 try
@@ -116,7 +116,7 @@ end
 import Pandas.DataFrame as pd_df
 
 @pyinclude("src/make_VALD_line_list.py")
-@time VALD_masks, VALD_masks_long = py"getVALDmasks"(overlap_cutoff=overlap_cutoff, depth_cutoff=depth_cutoff, iron1Only=iron1Only, badLineFilter=badLineFilter, allowBlends=allowBlends)
+@time VALD_masks, VALD_masks_long = py"getVALDmasks"(overlap_cutoff=Params.overlap_cutoff[], depth_cutoff=Params.depth_cutoff[], iron1Only=Params.iron1Only[], badLineFilter=Params.badLineFilter[], allowBlends=Params.allowBlends[])
 VALD_mask = VALD_masks[0]
 VALD_mask_long = VALD_masks_long[0]
 
@@ -129,7 +129,7 @@ rename!(empirical_mask_3col, [:lambda, :depth, :line_id])
 
 empirical_mask_pd = pd_df(empirical_mask_3col)
 
-combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_output ? VALD_mask_long : VALD_mask, threshold=500.0)
+combined_mask = py"mask_intersection"(empirical_mask_pd, Params.VALD_output[] ? VALD_mask_long : VALD_mask, threshold=500.0)
 
 function pd_df_to_df(df_pd)
    df = DataFrame()
@@ -141,19 +141,19 @@ end
 
 combined_mask_df = pd_df_to_df(combined_mask)
 
-telluric_indices = py"getTelluricIndices"(combined_mask, true, overlap_cutoff, vel_slope_threshold=rejectTelluricSlope, RV_offset = 0.0, RV_range = 1e-4)
+telluric_indices = py"getTelluricIndices"(combined_mask, true, Params.overlap_cutoff[], vel_slope_threshold=Params.rejectTelluricSlope[], RV_offset = 0.0, RV_range = 1e-4)
 
 mask = combined_mask_df[map(!,telluric_indices),:]
 
 mask.weight = mask.depth
 
 #binned_masks = binMask(rename(mask,[:lambda,:weight]), nbin, binParam=:weight)
-binned_masks = binMask(mask, nbin, binParam=binParam)
+binned_masks = binMask(mask, Params.nbin[], binParam=Params.binParam[])
 #rename!(binned_masks[1], [:lambda, :depth])
 
-for bin_n in 1:nbin
-   saveStr = "RvLineList" * "_allowBlends="*string(allowBlends) * "_overlapcutoff="*string(overlap_cutoff) * "_rejectTelluricSlope="*string(rejectTelluricSlope) * "_badLineFilter="*badLineFilter* "_quant="*quant * "_nbin="*string(nbin) * "_DP="*string(depthPercentile) * "_binParam="*string(binParam) * "_n="*string(bin_n) * "_VALD_output="*string(VALD_output) * "_VACUUM" * ".csv"
-   CSV.write(joinpath(output_dir,"clean_masks",saveStr),binned_masks[bin_n])
+for bin_n in 1:Params.nbin[]
+   saveStr = "RvLineList" * "_allowBlends="*string(params.allowBlends[]) * "_overlapcutoff="*string(Params.overlap_cutoff[]) * "_rejectTelluricSlope="*string(Params.rejectTelluricSlope[]) * "_badLineFilter="*Params.badLineFilter[]* "_quant="*quant * "_nbin="*string(Params.nbin[]) * "_DP="*string(Params.depthPercentile[]) * "_binParam="*string(Params.binParam[]) * "_n="*string(Params.bin_n[]) * "_VALD_output="*string(Params.VALD_output[]) * "_VACUUM" * ".csv"
+   CSV.write(joinpath(Params.output_dir[],"clean_masks",saveStr),binned_masks[bin_n])
 end
 
 #julia --project=RvSpectML/RvLineList RvSpectML/RvLineList/examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=1e-5 --rejectTelluricSlope=2000 --badLineFilter="none", --nbin=1 --output_dir="/home/awise/Desktop/neid_masks"
