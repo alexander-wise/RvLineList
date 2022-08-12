@@ -36,11 +36,11 @@ function read_mask(fn::String)
     return df
 end
 
-function get_airVacString(inst::Module)
+function get_airVacString(inst::Symbol)
    local airVacString
-   if inst in (NEID, EXPRES)
+   if inst in (:neid, :expres)
       airVacString="_VACUUM"
-   elseif inst in (HARPS, HARPSN)
+   elseif inst in (:harps, :harpsn)
       airVacString="_AIR"
    end
    return airVacString

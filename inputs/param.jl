@@ -8,7 +8,7 @@
 
 max_spectra_to_use = 1000000
 if max_spectra_to_use < 200
-   @warn "param.in setting max_spectra_to_use to " * max_spectra_to_use
+   println("Warning: param.jl setting max_spectra_to_use to " * string(max_spectra_to_use))
 end
 
 #expres_data_path = "/home/awise/data/expres/"
@@ -28,7 +28,7 @@ neid_data_path = "/gpfs/group/ebf11/default/ebf11/neid_solar/data/pipeline/v1.1/
 output_dir = joinpath(pwd(),"outputs")
 VALD_output=true #whether or not to carry VALD line data through to the final mask
 
-inst = NEID
+inst = :neid
 #target_subdir="101501"
 
 local fits_target_str
@@ -36,7 +36,7 @@ local espresso_mask_filename
 local ccf_mid_velocity
 local data_path
 
-if inst==EXPRES
+if inst == :expres
    @assert @isdefined expres_data_path
    data_path = joinpath(expres_data_path,target_subdir)
    fits_target_str = target_subdir
@@ -58,7 +58,7 @@ if inst==EXPRES
    end
 end
 
-if inst==NEID #we are using solar data
+if inst == :neid #we are using solar data
    fits_target_str="neid"
    @assert @isdefined neid_data_path
    data_path = neid_data_path
@@ -66,14 +66,14 @@ if inst==NEID #we are using solar data
    ccf_mid_velocity = 0.0
 end
 
-if inst==HARPS #the target is Alpha Centauri B
+if inst == :harps #the target is Alpha Centauri B
    @assert @isdefined harps_data_path
    data_path = joinpath(harps_data_path,target_subdir)
    espresso_mask_filename = "K2.espresso.mas"
    ccf_mid_velocity = -22000.0
 end
 
-if inst==HARPSN #we are using solar data
+if inst == :harpsn #we are using solar data
    @assert @isdefined harpsn_data_path
    data_path = joinpath(harpsn_data_path,target_subdir)
    espresso_mask_filename = "G2.espresso.mas"
