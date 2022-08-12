@@ -259,7 +259,7 @@ function fit_line_RVs_in_chunklist_timeseries(clt::AbstractChunkListTimeseries, 
 
     mean_template_flux = mean(template[chid](clt.chunk_list[t][chid].λ)[pixels[t]])
     template_flux = template[chid](clt.chunk_list[t][chid].λ) ./ mean_template_flux
-    deriv = template_deriv[chid](clt.chunk_list[t][chid].λ) ./ mean_template_flux #is this correct? to divide the derivative by the mean flux to normalize?
+    deriv = template_deriv[chid](clt.chunk_list[t][chid].λ) ./ mean_template_flux
 
     fit_z[t] = fit_line_RV(flux, var, template_flux, deriv, pixels[t])
   end
