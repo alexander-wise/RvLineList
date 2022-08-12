@@ -201,11 +201,24 @@ function combine_NEID_daily_obs(params::Module, dates::Vector{Date})
 end
 
 
+function fit_one_line_RVs_in_chunklist_timeseries(clt::AbstractChunkListTimeseries, template, template_deriv, lines::DataFrame, idx::Int64)
+   @assert 1 <= idx <= size(lines,1)
+   λmin = lines[line_idx,:fit_min_λ]
+   λmax = lines[line_idx,:fit_max_λ]
+   chid = lines[line_idx,:chunk_id]
+   df = fit_line_RVs_in_chunklist_timeseries(clt, template, template_deriv, λmin, λmax, chid)
+   df[!,:line_id] .= line_idx
+   return df
+end
+
+function fit_all_line_RVs_in_chunklist_timeseries(clt::AbstractChunkListTimeseries, template, template_deriv, lines::DataFrame)
+   df = DataFrame()
+   map(idx -> append!(df,fit_one_line_RVs_in_chunklist_timeseries(clt, template, template_deriv, lines, idx)) , 1:size(lines,1))
+   return df
+ end
 
 
-
-
-
+"""
 function fit_all_line_RVs_in_chunklist_timeseries(clt::AbstractChunkListTimeseries, template, template_deriv, lines::DataFrame)
    @assert size(lines,1) >= 2
    line_idx::Int64 = 1
@@ -224,22 +237,20 @@ function fit_all_line_RVs_in_chunklist_timeseries(clt::AbstractChunkListTimeseri
    end
    return df
  end
-
+"""
  
 
-""" `fit_line_in_chunklist_timeseries( chunk_list_timeseries, λmin, λmax, chunk_index)`
+""" `fit_line_RVs_in_chunklist_timeseries( clt, template, template_deriv, λmin, λmax, chid)`
 Return DataFrame with results of fits to each line in a given chunk of chunk_list_timeseries (including each observation time)
 Inputs:
-- chunk_list_timeseries: Data to fit
+- clt: Data to fit
 - template: high SNR data template
+- template_deriv: derivative of template
 - λmin
 - λmax
 - chunk_index:  Restricts fitting to specified chunk
 Outputs a DataFrame with keys:
 - fit_z: doppler factor for line fit
-- fit_covar: Covariance matrix for fit parameters
-- χ²_per_dof: quality of fit to chunk
-- fit_converged: Bool indicating if `LsqFit` converged
 - obs_idx: index of observation in chunk_list_timeseries
 - chunk_id: index of chunk in chunk_list_timeseries
 - pixels: range of pixels that was fit
