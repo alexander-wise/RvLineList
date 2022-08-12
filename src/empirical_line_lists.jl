@@ -131,7 +131,7 @@ end #end function generateEmpiricalMask()
 #author: Eric Ford
 #adapted from: RvSpectML.jl/examples/expres_analyze_line_by_line.jl
 function select_line_fits_with_good_depth_width_slope(line_fits_df::DataFrame, quantile_threshold::Real; verbose::Bool = false, output_dir::String = "", fits_target_str::String = "" )
-   
+
    fit_distrib = line_fits_df |> @groupby(_.line_id) |>
             @map( { median_a=median(_.fit_a), median_b=median(_.fit_b), median_depth=median(_.fit_depth), median_σ²=median(_.fit_σ²), median_λc=median(_.fit_λc),
                    std_a=std(_.fit_a), std_b=std(_.fit_b), std_depth=std(_.fit_depth), std_σ²=std(_.fit_σ²), std_λc=std(_.fit_λc),
@@ -185,7 +185,7 @@ end
 #combine NEID clean daily mean spectra from daily_ccfs files into a vector of type Spectra2DBasic
 function combine_NEID_daily_obs(params::Module, dates::Vector{Date})
    obs_list, manifest_list = get_NEID_daily_obs_list_and_manifest_list(params,dates)
-   @time obs_lambda_flux_var = [getindex.(Ref(load(fn)),["mean_lambda", "mean_clean_flux_continuum_normalized", "mean_clean_var"]) for fn in obs_list]
+   @time obs_lambda_flux_var = [getindex.(Ref(load(fn)),["mean_lambda", "mean_clean_flux_continuum_normalized", "mean_clean_var_continuum_normalized"]) for fn in obs_list]
    daily_rvs = zeros(length(manifest_list))
    for i in eachindex(manifest_list)
       manifest_i = CSV.read(manifest_list[i], DataFrame)
