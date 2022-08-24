@@ -1,5 +1,6 @@
 #params for RvLineList.jl
 
+
 #module Params
 
 #export max_spectra_to_use
@@ -8,7 +9,7 @@
 #export espresso_mask_filename, orders_to_use, norm_type, ccf_mid_velocity
 #export linelist_params
 
-Params = Dict()
+Params = Dict{Symbol,Any}()
 
 push!(Params,:max_spectra_to_use => 1000000)
 if Params[:max_spectra_to_use] < 200
