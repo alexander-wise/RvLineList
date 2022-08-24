@@ -4,9 +4,9 @@
 #TODO: Make sure barycentric shifting is working in template making (i thought its only 20 m/s but its actualy closer to 1 km/s)
 
 """ Check that params module includes required params for a function """
-function assert_params_exist(params::Module, params_to_check::Vector{Symbol})
+function assert_params_exist(params::Dict{Any,Any}, params_to_check::Vector{Symbol})
    for p in params_to_check
-      @assert isdefined(params,p) string(p," not defined in params")
+      @assert haskey(params,p) string(p," not defined in params")
    end
 end
 
@@ -39,7 +39,7 @@ Steps:
 Outputs:
    Empirical Mask::DataFrame: empirically-fitted and filtered RV mask including (specify fields)
 """
-function generateEmpiricalMask(params::Module ; output_dir::String=params.output_dir[], pipeline_plan::PipelinePlan = PipelinePlan(), verbose::Bool=true)
+function generateEmpiricalMask(params::Dict{Any,Any} ; output_dir::String=params[:output_dir], pipeline_plan::PipelinePlan = PipelinePlan(), verbose::Bool=true)
 
    assert_params_exist(params, [:output_dir, :norm_type, :inst, :pipeline_output_path_ebf11, :orders_to_use, :fits_target_str, :line_width_50, :quant])
 
@@ -53,14 +53,14 @@ function generateEmpiricalMask(params::Module ; output_dir::String=params.output
    #paths_to_search_for_param = [pwd(),joinpath(pwd(),"inputs"),joinpath(pkgdir(RvLineList),"inputs")]
    #eval(read_data_paths(paths_to_search=paths_to_search_for_param, filename="param.jl"))
 
-   if params.norm_type[] != :continuum
-      println("Warning: norm_type=:continuum is required by generateEmpiricalMask() but found norm_type=:", String(params.norm_type[]))
+   if params[:norm_type] != :continuum
+      println("Warning: norm_type=:continuum is required by generateEmpiricalMask() but found norm_type=:", String(params[:norm_type]))
    end
 
    if need_to(pipeline_plan,:read_spectra)
-      if params.inst[] == :expres
+      if params[:inst] == :expres
          all_spectra = EXPRES_read_spectra(data_path) #note this is in expres_old.jl and needs to be loaded manually for now. Also this uses data_path and max_spectra_to_use param (not included in params_to_check since this is deprecated)
-      elseif params.inst[] == :neid
+      elseif params[:inst] == :neid
          all_spectra = combine_NEID_daily_obs(params,get_NEID_best_days(params,startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100))
       else
          print("Error: spectra failed to load; inst not supported.")
@@ -72,14 +72,38 @@ function generateEmpiricalMask(params::Module ; output_dir::String=params.output
    if typeof(get_inst(all_spectra)) <: AnyEXPRES   RvLineList.continuum_normalize_spectra!(all_spectra)   end
 
    #extract orders_to_use from all_spectra. We use remove_bad_chunks=false because neid has some nans due to a bad detector column
-   order_list_timeseries = extract_orders(all_spectra, pipeline_plan, orders_to_use=params.orders_to_use[], remove_bad_chunks=false, recalc=true);
+   order_list_timeseries = extract_orders(all_spectra, pipeline_plan, orders_to_use=params[:orders_to_use], remove_bad_chunks=false, recalc=true);
 
-   #remove nans from data before making template spectra - TODO: turn this into an interpolation or modify template construction to allow nans
-   for i in 1:length(order_list_timeseries)
-     for j in 1:length(order_list_timeseries[1])
-       order_list_timeseries[i][j].flux[isnan.(order_list_timeseries[i][j].flux)] .= 1.0
+   #remove nans from data and track them before making template spectra
+   n_times = length(order_list_timeseries)
+   n_orders = length(order_list_timeseries[1])
+   n_pixels = length(order_list_timeseries[1][1].flux)
+   flux_nan_idx = zeros(Bool,n_times,n_orders,n_pixels) #note this assumes all orders in order_list_timeseries have the same number of pixels
+   flux_neg_idx = zeros(Bool,n_times,n_orders,n_pixels) #note this assumes all orders in order_list_timeseries have the same number of pixels
+   var_nan_idx = zeros(Bool,n_times,n_orders,n_pixels) #note this assumes all orders in order_list_timeseries have the same number of pixels
+   var_neg_idx = zeros(Bool,n_times,n_orders,n_pixels) #note this assumes all orders in order_list_timeseries have the same number of pixels
+   for i in 1:n_times
+     for j in 1:n_orders
+       #check for nans in flux
+       flux_nan_idx_ij = isnan.(order_list_timeseries[i][j].flux)
+       flux_nan_idx[i,j,flux_nan_idx_ij] .= true
+       order_list_timeseries[i][j].flux[flux_nan_idx_ij] .= 1.0
+       #check for negative flux
+       flux_neg_idx_ij = order_list_timeseries[i][j].flux .< 0.0
+       flux_neg_idx[i,j,flux_neg_idx_ij] .= true
+       order_list_timeseries[i][j].flux[flux_neg_idx_ij] .= 0.01
+       order_list_timeseries[i][j].var[flux_neg_idx_ij] .= 1.0
+       #check for nans in var
+       var_nan_idx_ij = isnan.(order_list_timeseries[i][j].var)
+       var_nan_idx[i,j,var_nan_idx_ij] .= true
+       order_list_timeseries[i][j].var[var_nan_idx_ij] .= 1.0
+       #check for negative var
+       var_neg_idx_ij = order_list_timeseries[i][j].var .< 0.0
+       var_neg_idx[i,j,var_neg_idx_ij] .= true
+       order_list_timeseries[i][j].var[var_neg_idx_ij] .= 1.0
      end
    end
+   bad_idx = flux_nan_idx .| flux_neg_idx .| var_nan_idx .| var_neg_idx
 
    if need_to(pipeline_plan, :template)  # Compute order CCF's & measure RVs
       if verbose println("# Making template spectra.")  end
@@ -91,10 +115,15 @@ function generateEmpiricalMask(params::Module ; output_dir::String=params.output
       #@time ( spectral_orders_matrix, f_mean, var_mean, deriv, deriv2, order_grids )  = RvSpectML.make_template_spectra(order_list_timeseries, alg=:Sinc)
       if save_data(pipeline_plan, :template)
          #using JLD2, FileIO
-         save(joinpath(output_dir,params.fits_target_str[] * "_matrix.jld2"), Dict("λ"=>spectral_orders_matrix.λ,"spectra"=>spectral_orders_matrix.flux,"var_spectra"=>spectral_orders_matrix.var,"flux_template"=>f_mean,"var"=>var_mean, "dfluxdlnλ_template"=>deriv,"d²fluxdlnλ²_template"=>deriv2))
+         save(joinpath(output_dir,params[:fits_target_str] * "_matrix.jld2"), Dict("λ"=>spectral_orders_matrix.λ,"spectra"=>spectral_orders_matrix.flux,"var_spectra"=>spectral_orders_matrix.var,"flux_template"=>f_mean,"var"=>var_mean, "dfluxdlnλ_template"=>deriv,"d²fluxdlnλ²_template"=>deriv2))
       end
       dont_need_to!(pipeline_plan, :template);
    end
+
+   #some variances are created negative in template construction. #TOOD: add these to bad_idx?
+   template_var_neg_idx = findall(var_mean .< 0)
+   var_mean[template_var_neg_idx] .= 1.0
+
    
    if need_to(pipeline_plan,:fit_lines)
       if verbose println("# Performing fresh search for lines in template spectra.")  end
@@ -107,22 +136,22 @@ function generateEmpiricalMask(params::Module ; output_dir::String=params.output
       GC.gc()
       need_to!(pipeline_plan,:template)
       #lines_in_template_logy = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=line_width_50,min_deriv2=0.5, use_logλ=true, use_logflux=true), verbose=false)  # TODO: Automate threshold for finding a line
-      lines_in_template = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=params.line_width_50[],min_deriv2=0.5, use_logλ=true, use_logflux=false), verbose=false)  # TODO: Automate threshold for finding a line
+      lines_in_template = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=params[:line_width_50],min_deriv2=0.5, use_logλ=true, use_logflux=false), verbose=false)  # TODO: Automate threshold for finding a line
    
       if verbose println("# Finding above lines in all spectra.")  end
       @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_in_template )
       @time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_in_template )
    
       if save_data(pipeline_plan,:fit_lines)
-         CSV.write(joinpath(output_dir,"linefinder",params.fits_target_str[] * "_linefinder_lines.csv"), lines_in_template )
-         CSV.write(joinpath(output_dir,"linefinder",params.fits_target_str[] * "_linefinder_line_fits.csv"), fits_to_lines )
-         CSV.write(joinpath(output_dir,"linefinder",params.fits_target_str[] * "_linefinder_line_RVs.csv"), line_RVs )
+         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_lines.csv"), lines_in_template )
+         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_fits.csv"), fits_to_lines )
+         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_RVs.csv"), line_RVs )
       end
    
       dont_need_to!(pipeline_plan,:fit_lines);
    end
    
-   select_line_fits_with_good_depth_width_slope(fits_to_lines, parse(Float64,params.quant[]) / 100, verbose=verbose, output_dir=output_dir, fits_target_str=params.fits_target_str[])
+   select_line_fits_with_good_depth_width_slope(fits_to_lines, parse(Float64,params[:quant]) / 100, verbose=verbose, output_dir=output_dir, fits_target_str=params[:fits_target_str])
 
 end #end function generateEmpiricalMask()
 
@@ -163,7 +192,7 @@ end
 
 
 #generate function that finds 100 days between jan 1, 2021 and sept 30, 2021, with highest number of num_rvs.good according to summary_1.csv
-function get_NEID_best_days(params::Module; pipeline_output_summary_path::String=joinpath(params.pipeline_output_path_ebf11[],"summary_1.csv"), startDate::Date=Date(2021,01,01), endDate::Date=Date(2021,09,30), nBest::Int64=100)
+function get_NEID_best_days(params::Dict{Any,Any}; pipeline_output_summary_path::String=joinpath(params[:pipeline_output_path_ebf11],"summary_1.csv"), startDate::Date=Date(2021,01,01), endDate::Date=Date(2021,09,30), nBest::Int64=100)
    @assert endDate > startDate
    #summary_1 = CSV.read("/home/awise/data/neid/solar/summary_1.csv", DataFrame)
    summary_1 = CSV.read(pipeline_output_summary_path, DataFrame)
@@ -175,7 +204,7 @@ function get_NEID_best_days(params::Module; pipeline_output_summary_path::String
 end
 
 #given a vector of dates, as well as filenames for ccf and manifest files, get a vector of all relevant file paths for these dates.
-function get_NEID_daily_obs_list_and_manifest_list(params::Module, dates::Vector{Date}; pipeline_output_path=params.pipeline_output_path_ebf11[], ccf_fn::String = "daily_ccfs_1.jld2", manifest_fn = "manifest.csv")
+function get_NEID_daily_obs_list_and_manifest_list(params::Dict{Any,Any}, dates::Vector{Date}; pipeline_output_path=params[:pipeline_output_path_ebf11], ccf_fn::String = "daily_ccfs_1.jld2", manifest_fn = "manifest.csv")
    date_dirs = reduce.(joinpath,split.(Dates.format.(dates,ISODateFormat),"-"))
    obs_list = joinpath.(pipeline_output_path,date_dirs,ccf_fn)
    manifest_list = joinpath.(pipeline_output_path,date_dirs,manifest_fn)
@@ -183,7 +212,7 @@ function get_NEID_daily_obs_list_and_manifest_list(params::Module, dates::Vector
 end
 
 #combine NEID clean daily mean spectra from daily_ccfs files into a vector of type Spectra2DBasic
-function combine_NEID_daily_obs(params::Module, dates::Vector{Date})
+function combine_NEID_daily_obs(params::Dict{Any,Any}, dates::Vector{Date})
    obs_list, manifest_list = get_NEID_daily_obs_list_and_manifest_list(params,dates)
    @time obs_lambda_flux_var = [getindex.(Ref(load(fn)),["mean_lambda", "mean_clean_flux_continuum_normalized", "mean_clean_var_continuum_normalized"]) for fn in obs_list]
    daily_rvs = zeros(length(manifest_list))
@@ -199,6 +228,9 @@ function combine_NEID_daily_obs(params::Module, dates::Vector{Date})
    all_spectra = map(obs -> Spectra2DBasic(obs[1], obs[2], obs[3], NEID2D(), metadata=obs[4]), zip(obs_lambda,obs_flux,obs_var,obs_metadata))
    return all_spectra
 end
+
+
+
 
 
 function fit_one_line_RVs_in_chunklist_timeseries(clt::AbstractChunkListTimeseries, template, template_deriv, lines::DataFrame, idx::Int64)
@@ -304,9 +336,9 @@ function fit_line_RV(flux::AbstractArray{T1,1}, var::AbstractArray{T2,1}, templa
 """
 
 
-fits_to_lines = CSV.read(joinpath(params.output_dir[],"masks/linefinder",params.fits_target_str[] * "_linefinder_line_fits.csv"), DataFrame )
-line_RVs = CSV.read(joinpath(params.output_dir[],"masks/linefinder",params.fits_target_str[] * "_linefinder_line_RVs.csv"), DataFrame )
-lines_in_template = CSV.read(joinpath(params.output_dir[],"masks/linefinder",params.fits_target_str[] * "_linefinder_lines.csv"), DataFrame )
+fits_to_lines = CSV.read(joinpath(params[:output_dir],"masks/linefinder",params[:fits_target_str] * "_linefinder_line_fits.csv"), DataFrame )
+line_RVs = CSV.read(joinpath(params[:output_dir],"masks/linefinder",params[:fits_target_str] * "_linefinder_line_RVs.csv"), DataFrame )
+lines_in_template = CSV.read(joinpath(params[:output_dir],"masks/linefinder",params[:fits_target_str] * "_linefinder_lines.csv"), DataFrame )
 
 C_m_s = 2.99792458e8 #speed of light in m/s
 
