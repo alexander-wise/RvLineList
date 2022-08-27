@@ -4,10 +4,109 @@
 #TODO: Make sure barycentric shifting is working in template making (i thought its only 20 m/s but its actualy closer to 1 km/s)
 
 """ Check that params module includes required params for a function """
-function assert_params_exist(params::Dict{Any,Any}, params_to_check::Vector{Symbol})
+function assert_params_exist(params::Dict{Symbol,Any}, params_to_check::Vector{Symbol})
    for p in params_to_check
       @assert haskey(params,p) string(p," not defined in params")
    end
+end
+
+""" Get pixel wavelength boundaries for a chunk list timeseries """
+function get_pixel_boundaries(order_list_timeseries::ACLT) where { ACLT<:AbstractChunkListTimeseries }
+   n_times = length(order_list_timeseries)
+   n_orders = length(order_list_timeseries[1])
+   n_pixels = length(order_list_timeseries[1][1].flux)
+   λ_edges = zeros(n_times,n_orders,n_pixels,2)
+   for t in 1:n_times
+      for o in 1:n_orders
+         λ = order_list_timeseries[t][o].λ
+         dλ = λ[2:end] - λ[1:end-1]
+         dλ = [dλ[1];dλ;dλ[end]] / 2
+         for i in 1:n_pixels
+            λ_edges[t,o,i,:] = [λ[i] - dλ[i], λ[i] + dλ[i+1]]
+         end
+      end #for o in 1:n_orders
+   end # for t in 1:n_times
+   return λ_edges
+end
+
+" Remove nans and negative values from order_list_timeseries and return a list of intervals for the wavelengths of affected pixels"
+function remove_and_track_nans_negatives!(order_list_timeseries::ACLT) where { ACLT<:AbstractChunkListTimeseries }
+      #remove nans from data and track them before making template spectra
+      n_times = length(order_list_timeseries)
+      n_orders = length(order_list_timeseries[1])
+      n_pixels = length(order_list_timeseries[1][1].flux)
+      flux_nan_idx = zeros(Bool,n_times,n_orders,n_pixels) #note these 3-D boolean array sizes assume all orders in order_list_timeseries have the same number of pixels
+      flux_neg_idx = zeros(Bool,n_times,n_orders,n_pixels) 
+      var_nan_idx = zeros(Bool,n_times,n_orders,n_pixels) 
+      var_neg_idx = zeros(Bool,n_times,n_orders,n_pixels) 
+      for i in 1:n_times
+        for j in 1:n_orders
+          #check for nans in flux
+          flux_nan_idx_ij = isnan.(order_list_timeseries[i][j].flux)
+          flux_nan_idx[i,j,flux_nan_idx_ij] .= true
+          order_list_timeseries[i][j].flux[flux_nan_idx_ij] .= 1.0
+          #check for negative flux
+          flux_neg_idx_ij = order_list_timeseries[i][j].flux .< 0.0
+          flux_neg_idx[i,j,flux_neg_idx_ij] .= true
+          order_list_timeseries[i][j].flux[flux_neg_idx_ij] .= 0.01
+          order_list_timeseries[i][j].var[flux_neg_idx_ij] .= 1.0
+          #check for nans in var
+          var_nan_idx_ij = isnan.(order_list_timeseries[i][j].var)
+          var_nan_idx[i,j,var_nan_idx_ij] .= true
+          order_list_timeseries[i][j].var[var_nan_idx_ij] .= 1.0
+          #check for negative var
+          var_neg_idx_ij = order_list_timeseries[i][j].var .< 0.0
+          var_neg_idx[i,j,var_neg_idx_ij] .= true
+          order_list_timeseries[i][j].var[var_neg_idx_ij] .= 1.0
+        end
+      end
+      neg_idx = flux_neg_idx .| var_neg_idx
+      #neg_idx = .|([neg_idx[i,:,:] for i in 1:n_times]...)
+      nan_idx = flux_nan_idx .| var_nan_idx
+      #nan_idx = .|([nan_idx[i,:,:] for i in 1:n_times]...)
+
+      pixel_boundaries = get_pixel_boundaries(order_list_timeseries)
+
+      neg_wavelength_intervals = zeros(sum(neg_idx),3)
+      for (i,idx) in enumerate(findall(neg_idx))
+         neg_wavelength_intervals[i,:] = [idx[2];pixel_boundaries[idx[1],idx[2],idx[3],:]]
+      end
+
+      nan_wavelength_intervals = zeros(sum(nan_idx),3)
+      for (i,idx) in enumerate(findall(nan_idx))
+         nan_wavelength_intervals[i,:] = [idx[2];pixel_boundaries[idx[1],idx[2],idx[3],:]]
+      end
+
+      return neg_wavelength_intervals, nan_wavelength_intervals
+end
+
+""" check if intervals a and b have any overlap """
+function intervals_overlap(a_low::Float64, a_high::Float64, b_low::Float64, b_high::Float64)
+   a_low <= b_high && b_low <= a_high
+end
+
+
+""" Take in bad wavelength intervals and match with line list to flag lines as affected by a bad pixel. Output is a bit vector where 1 indicates a match"""
+function match_bad_wavelength_intervals_with_lines(bad_waves::Matrix{Float64}, cl::AbstractChunkList, line_list::DataFrame)
+   @assert (size(bad_waves,2) == 3) && all(bad_waves[:,2] .< bad_waves[:,3]) # make the the bad wavelngths are given as intervals
+   @assert ("pixels" in names(line_list)) && ("chunk_id" in names(line_list)) #make sure the line list has expected columns for line wavelengths
+   n_lines = nrow(line_list)
+   bad_lines = zeros(Bool,n_lines)
+
+   for line in eachrow(line_list)
+      λs = cl[line[:chunk_id]].λ[line[:pixels]]
+      #check one extra pixel on each side of the line
+      λlow = λs[1] - (λs[2]-λs[1])
+      λhigh = λs[end] + (λs[end]-λs[end-1])
+      #find bad lines in the same chunk
+      bad_waves_in_chunk = findall(bad_waves[:,1] .== line[:chunk_id])
+      #look for overlap between line and any bad lines in the same chunk
+      if any(intervals_overlap.(bad_waves[bad_waves_in_chunk,2],bad_waves[bad_waves_in_chunk,3],λlow,λhigh))
+         bad_lines[rownumber(line)] = true
+      end
+   end
+
+   return bad_lines
 end
 
 """ Generate an empirical mask by finding spectral lines, fiting them with gaussians with a linear offset, and filtering the fitted line params
@@ -39,7 +138,7 @@ Steps:
 Outputs:
    Empirical Mask::DataFrame: empirically-fitted and filtered RV mask including (specify fields)
 """
-function generateEmpiricalMask(params::Dict{Any,Any} ; output_dir::String=params[:output_dir], pipeline_plan::PipelinePlan = PipelinePlan(), verbose::Bool=true)
+function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=params[:output_dir], pipeline_plan::PipelinePlan = PipelinePlan(), verbose::Bool=true)
 
    assert_params_exist(params, [:output_dir, :norm_type, :inst, :pipeline_output_path_ebf11, :orders_to_use, :fits_target_str, :line_width_50, :quant])
 
@@ -74,43 +173,15 @@ function generateEmpiricalMask(params::Dict{Any,Any} ; output_dir::String=params
    #extract orders_to_use from all_spectra. We use remove_bad_chunks=false because neid has some nans due to a bad detector column
    order_list_timeseries = extract_orders(all_spectra, pipeline_plan, orders_to_use=params[:orders_to_use], remove_bad_chunks=false, recalc=true);
 
-   #remove nans from data and track them before making template spectra
-   n_times = length(order_list_timeseries)
-   n_orders = length(order_list_timeseries[1])
-   n_pixels = length(order_list_timeseries[1][1].flux)
-   flux_nan_idx = zeros(Bool,n_times,n_orders,n_pixels) #note this assumes all orders in order_list_timeseries have the same number of pixels
-   flux_neg_idx = zeros(Bool,n_times,n_orders,n_pixels) #note this assumes all orders in order_list_timeseries have the same number of pixels
-   var_nan_idx = zeros(Bool,n_times,n_orders,n_pixels) #note this assumes all orders in order_list_timeseries have the same number of pixels
-   var_neg_idx = zeros(Bool,n_times,n_orders,n_pixels) #note this assumes all orders in order_list_timeseries have the same number of pixels
-   for i in 1:n_times
-     for j in 1:n_orders
-       #check for nans in flux
-       flux_nan_idx_ij = isnan.(order_list_timeseries[i][j].flux)
-       flux_nan_idx[i,j,flux_nan_idx_ij] .= true
-       order_list_timeseries[i][j].flux[flux_nan_idx_ij] .= 1.0
-       #check for negative flux
-       flux_neg_idx_ij = order_list_timeseries[i][j].flux .< 0.0
-       flux_neg_idx[i,j,flux_neg_idx_ij] .= true
-       order_list_timeseries[i][j].flux[flux_neg_idx_ij] .= 0.01
-       order_list_timeseries[i][j].var[flux_neg_idx_ij] .= 1.0
-       #check for nans in var
-       var_nan_idx_ij = isnan.(order_list_timeseries[i][j].var)
-       var_nan_idx[i,j,var_nan_idx_ij] .= true
-       order_list_timeseries[i][j].var[var_nan_idx_ij] .= 1.0
-       #check for negative var
-       var_neg_idx_ij = order_list_timeseries[i][j].var .< 0.0
-       var_neg_idx[i,j,var_neg_idx_ij] .= true
-       order_list_timeseries[i][j].var[var_neg_idx_ij] .= 1.0
-     end
-   end
-   bad_idx = flux_nan_idx .| flux_neg_idx .| var_nan_idx .| var_neg_idx
+   if verbose println("# Removing and tracking negative and nan values from spectra.") end
+   @time neg_wavelength_intervals, nan_wavelength_intervals = remove_and_track_nans_negatives!(order_list_timeseries)
+
 
    if need_to(pipeline_plan, :template)  # Compute order CCF's & measure RVs
-      if verbose println("# Making template spectra.")  end
+      if verbose println("# Making template spectrum.")  end
       @assert !need_to(pipeline_plan,:extract_orders)
       GC.gc()   # run garbage collector for deallocated memory
       #map(i->order_list_timeseries.metadata[i][:rv_est] = 0.0, 1:length(order_list_timeseries) )
-      # Smothing is broken with GP interpolation.  Need to fix.  In mean time, here's a Sinc interpolation workaround
       @time ( spectral_orders_matrix, f_mean, var_mean, deriv, deriv2, order_grids )  = RvSpectML.make_template_spectra(order_list_timeseries, smooth_factor=2.0) #, alg=:Sinc)
       #@time ( spectral_orders_matrix, f_mean, var_mean, deriv, deriv2, order_grids )  = RvSpectML.make_template_spectra(order_list_timeseries, alg=:Sinc)
       if save_data(pipeline_plan, :template)
@@ -120,14 +191,17 @@ function generateEmpiricalMask(params::Dict{Any,Any} ; output_dir::String=params
       dont_need_to!(pipeline_plan, :template);
    end
 
-   #some variances are created negative in template construction. #TOOD: add these to bad_idx?
-   template_var_neg_idx = findall(var_mean .< 0)
-   var_mean[template_var_neg_idx] .= 1.0
-
    
    if need_to(pipeline_plan,:fit_lines)
-      if verbose println("# Performing fresh search for lines in template spectra.")  end
+      if verbose println("# Initializing search for lines in template spectrum.")  end
       cl = ChunkList(map(grid->ChunkOfSpectrum(spectral_orders_matrix.λ,f_mean, var_mean, grid), spectral_orders_matrix.chunk_map), ones(Int64,length(spectral_orders_matrix.chunk_map)))
+      clt = ChunkListTimeseries([0.0], [cl], inst=first(all_spectra).inst, metadata=[Dict{Symbol,Any}()] )
+      if verbose println("# Removing and tracking negative and nan values from template.") end
+      neg_wavelength_intervals_template, nan_wavelength_intervals_template = remove_and_track_nans_negatives!(clt)
+      #add neg/nan wavelength intervals from template to full list
+      neg_wavelength_intervals = sort([neg_wavelength_intervals;neg_wavelength_intervals_template],dims=1)
+      nan_wavelength_intervals = sort([nan_wavelength_intervals;nan_wavelength_intervals_template],dims=1)
+
       cl_derivs = ChunkList(map(grid->ChunkOfSpectrum(spectral_orders_matrix.λ, deriv, deriv2, grid), spectral_orders_matrix.chunk_map), ones(Int64,length(spectral_orders_matrix.chunk_map)))
       template_linear_interp = map(chid -> Interpolations.LinearInterpolation(cl[chid].λ,cl[chid].flux,extrapolation_bc=Flat()), 1:length(cl))
       template_deriv_linear_interp = map(chid -> Interpolations.LinearInterpolation(cl_derivs[chid].λ,cl_derivs[chid].flux,extrapolation_bc=Flat()), 1:length(cl_derivs))
@@ -136,14 +210,23 @@ function generateEmpiricalMask(params::Dict{Any,Any} ; output_dir::String=params
       GC.gc()
       need_to!(pipeline_plan,:template)
       #lines_in_template_logy = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=line_width_50,min_deriv2=0.5, use_logλ=true, use_logflux=true), verbose=false)  # TODO: Automate threshold for finding a line
-      lines_in_template = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=params[:line_width_50],min_deriv2=0.5, use_logλ=true, use_logflux=false), verbose=false)  # TODO: Automate threshold for finding a line
-   
-      if verbose println("# Finding above lines in all spectra.")  end
-      @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_in_template )
-      @time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_in_template )
+      if verbose println("# Performing a fresh search for lines in template spectra.")  end
+      @time lines_in_template = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=params[:line_width_50],min_deriv2=0.5, use_logλ=true, use_logflux=false), verbose=false)  # TODO: Automate threshold for finding a line
+      lines_matching_neg_values = match_bad_wavelength_intervals_with_lines(neg_wavelength_intervals,cl,lines_in_template)
+      lines_matching_nan_values = match_bad_wavelength_intervals_with_lines(nan_wavelength_intervals,cl,lines_in_template)
+      lines_in_template[!, :neg_bad_line] = lines_matching_neg_values
+      lines_in_template[!, :nan_bad_line] = lines_matching_nan_values
+
+      good_line_idx = findall(.~(lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
+      lines_to_fit = lines_in_template[good_line_idx,:]
+
+      if verbose println("# Fitting above lines in all spectra.")  end
+      @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_to_fit )
+      @time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_to_fit )
    
       if save_data(pipeline_plan,:fit_lines)
          CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_lines.csv"), lines_in_template )
+         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_good_lines.csv"), lines_to_fit )
          CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_fits.csv"), fits_to_lines )
          CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_RVs.csv"), line_RVs )
       end
@@ -151,7 +234,7 @@ function generateEmpiricalMask(params::Dict{Any,Any} ; output_dir::String=params
       dont_need_to!(pipeline_plan,:fit_lines);
    end
    
-   select_line_fits_with_good_depth_width_slope(fits_to_lines, parse(Float64,params[:quant]) / 100, verbose=verbose, output_dir=output_dir, fits_target_str=params[:fits_target_str])
+   select_line_fits_with_good_depth_width_slope(params, fits_to_lines, parse(Float64,params[:quant]) / 100, verbose=verbose, output_dir=output_dir, fits_target_str=params[:fits_target_str])
 
 end #end function generateEmpiricalMask()
 
@@ -159,7 +242,9 @@ end #end function generateEmpiricalMask()
 
 #author: Eric Ford
 #adapted from: RvSpectML.jl/examples/expres_analyze_line_by_line.jl
-function select_line_fits_with_good_depth_width_slope(line_fits_df::DataFrame, quantile_threshold::Real; verbose::Bool = false, output_dir::String = "", fits_target_str::String = "" )
+function select_line_fits_with_good_depth_width_slope(params::Dict{Symbol,Any}, line_fits_df::DataFrame, quantile_threshold::Real; verbose::Bool = false, output_dir::String = "", fits_target_str::String = "" )
+
+   assert_params_exist(params, [:inst])
 
    fit_distrib = line_fits_df |> @groupby(_.line_id) |>
             @map( { median_a=median(_.fit_a), median_b=median(_.fit_b), median_depth=median(_.fit_depth), median_σ²=median(_.fit_σ²), median_λc=median(_.fit_λc),
@@ -184,7 +269,7 @@ function select_line_fits_with_good_depth_width_slope(line_fits_df::DataFrame, q
    end
    if length(output_dir) > 0
       val_str = Printf.@sprintf("%1.2f",quantile_threshold)
-      airVacString = get_airVacString(inst)
+      airVacString = get_airVacString(params[:inst])
       CSV.write(joinpath(output_dir,fits_target_str * "_good_lines_fit_quant=" * val_str * airVacString * ".csv"), good_lines_alt )
    end
    return good_lines_alt
@@ -192,19 +277,19 @@ end
 
 
 #generate function that finds 100 days between jan 1, 2021 and sept 30, 2021, with highest number of num_rvs.good according to summary_1.csv
-function get_NEID_best_days(params::Dict{Any,Any}; pipeline_output_summary_path::String=joinpath(params[:pipeline_output_path_ebf11],"summary_1.csv"), startDate::Date=Date(2021,01,01), endDate::Date=Date(2021,09,30), nBest::Int64=100)
+function get_NEID_best_days(params::Dict{Symbol,Any}; pipeline_output_summary_path::String=joinpath(params[:pipeline_output_path_ebf11],"summary_1.csv"), startDate::Date=Date(2021,01,01), endDate::Date=Date(2021,09,30), nBest::Int64=100)
    @assert endDate > startDate
    #summary_1 = CSV.read("/home/awise/data/neid/solar/summary_1.csv", DataFrame)
    summary_1 = CSV.read(pipeline_output_summary_path, DataFrame)
    summary_1_in_date_range = summary_1[(summary_1[!,"obs_date.string"] .>= startDate) .& (summary_1[!,"obs_date.string"] .<= endDate),:]
    indices = sort(reverse(sortperm(summary_1_in_date_range[!,"num_rvs.good"]))[1:nBest])
    NEID_best_days = summary_1_in_date_range[indices,:]
-   println(string("Taking all NEID days with at least ",minimum(NEID_best_days."num_rvs.good")," good RVs."))
+   println(string("# Taking all NEID days with at least ",minimum(NEID_best_days."num_rvs.good")," good RVs."))
    return NEID_best_days."obs_date.string"
 end
 
 #given a vector of dates, as well as filenames for ccf and manifest files, get a vector of all relevant file paths for these dates.
-function get_NEID_daily_obs_list_and_manifest_list(params::Dict{Any,Any}, dates::Vector{Date}; pipeline_output_path=params[:pipeline_output_path_ebf11], ccf_fn::String = "daily_ccfs_1.jld2", manifest_fn = "manifest.csv")
+function get_NEID_daily_obs_list_and_manifest_list(params::Dict{Symbol,Any}, dates::Vector{Date}; pipeline_output_path=params[:pipeline_output_path_ebf11], ccf_fn::String = "daily_ccfs_1.jld2", manifest_fn = "manifest.csv")
    date_dirs = reduce.(joinpath,split.(Dates.format.(dates,ISODateFormat),"-"))
    obs_list = joinpath.(pipeline_output_path,date_dirs,ccf_fn)
    manifest_list = joinpath.(pipeline_output_path,date_dirs,manifest_fn)
@@ -212,7 +297,7 @@ function get_NEID_daily_obs_list_and_manifest_list(params::Dict{Any,Any}, dates:
 end
 
 #combine NEID clean daily mean spectra from daily_ccfs files into a vector of type Spectra2DBasic
-function combine_NEID_daily_obs(params::Dict{Any,Any}, dates::Vector{Date})
+function combine_NEID_daily_obs(params::Dict{Symbol,Any}, dates::Vector{Date})
    obs_list, manifest_list = get_NEID_daily_obs_list_and_manifest_list(params,dates)
    @time obs_lambda_flux_var = [getindex.(Ref(load(fn)),["mean_lambda", "mean_clean_flux_continuum_normalized", "mean_clean_var_continuum_normalized"]) for fn in obs_list]
    daily_rvs = zeros(length(manifest_list))
@@ -235,11 +320,11 @@ end
 
 function fit_one_line_RVs_in_chunklist_timeseries(clt::AbstractChunkListTimeseries, template, template_deriv, lines::DataFrame, idx::Int64)
    @assert 1 <= idx <= size(lines,1)
-   λmin = lines[line_idx,:fit_min_λ]
-   λmax = lines[line_idx,:fit_max_λ]
-   chid = lines[line_idx,:chunk_id]
+   λmin = lines[idx,:fit_min_λ]
+   λmax = lines[idx,:fit_max_λ]
+   chid = lines[idx,:chunk_id]
    df = fit_line_RVs_in_chunklist_timeseries(clt, template, template_deriv, λmin, λmax, chid)
-   df[!,:line_id] .= line_idx
+   df[!,:line_id] .= idx
    return df
 end
 
