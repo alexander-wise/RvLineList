@@ -64,6 +64,44 @@ function remove_and_track_nans_negatives!(order_list_timeseries::ACLT) where { A
       #neg_idx = .|([neg_idx[i,:,:] for i in 1:n_times]...)
       nan_idx = flux_nan_idx .| var_nan_idx
       #nan_idx = .|([nan_idx[i,:,:] for i in 1:n_times]...)
+      """
+      flux_neg_idx = dropdims(sum(flux_neg_idx,dims=1),dims=1)
+      flux_nan_idx = dropdims(sum(flux_nan_idx,dims=1),dims=1)
+      var_neg_idx = dropdims(sum(var_neg_idx,dims=1),dims=1)
+      var_nan_idx = dropdims(sum(var_nan_idx,dims=1),dims=1)
+
+
+      flux_neg_idx_bool = flux_neg_idx .!= 0
+      flux_nan_idx_bool = flux_nan_idx .!= 0
+      var_neg_idx_bool = var_neg_idx .!= 0
+      var_nan_idx_bool = var_nan_idx .!= 0
+
+      flux_neg_idx2 = Float64.(flux_neg_idx)
+      flux_nan_idx2 = Float64.(flux_nan_idx)
+      var_neg_idx2 = Float64.(var_neg_idx)
+      var_nan_idx2 = Float64.(var_nan_idx)
+
+      flux_neg_idx2[flux_neg_idx2 .== 0] .= NaN
+      flux_nan_idx2[flux_nan_idx2 .== 0] .= NaN
+      var_neg_idx2[var_neg_idx2 .== 0] .= NaN
+      var_nan_idx2[var_nan_idx2 .== 0] .= NaN
+
+      using Colors
+      using Plots
+
+      heatmap(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), .~(flux_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux negative values", size=(1600,800))
+      heatmap!(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), flux_neg_idx2, c=colormap("Greens"), label="flux negative")
+
+      heatmap(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), .~(flux_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux nan values", size=(1600,800))
+      heatmap!(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), flux_nan_idx2, c=colormap("Blues"), label="flux nan")
+
+      heatmap(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), .~(var_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var neg values", size=(1600,800))
+      heatmap!(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), var_neg_idx2, c=colormap("Reds"), label="var negative")
+
+      heatmap(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), .~(var_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var nan values", size=(1600,800))
+      heatmap!(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), var_nan_idx2, c=colormap("Purples"), label="var nan")
+      """
+
 
       pixel_boundaries = get_pixel_boundaries(order_list_timeseries)
 
@@ -140,7 +178,7 @@ Outputs:
 """
 function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=params[:output_dir], pipeline_plan::PipelinePlan = PipelinePlan(), verbose::Bool=true)
 
-   assert_params_exist(params, [:output_dir, :norm_type, :inst, :pipeline_output_path_ebf11, :orders_to_use, :fits_target_str, :line_width_50, :quant])
+   assert_params_exist(params, [:output_dir, :norm_type, :inst, :pipeline_output_path_ebf11, :orders_to_use, :fits_target_str, :line_width_50, :quant, :discard_neg_nan])
 
    #isSolarData=false
    #output_dir = "outputs/masks/"
@@ -218,8 +256,11 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       lines_in_template[!, :nan_bad_line] = lines_matching_nan_values
 
       good_line_idx = findall(.~(lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
-      if verbose println("# Removing " * string(nrow(lines_in_template) - length(good_line_idx)) * " lines due to matching nan or negative values.") end
-      lines_to_fit = lines_in_template[good_line_idx,:]
+
+      if discard_neg_nan
+        if verbose println("# Removing " * string(nrow(lines_in_template) - length(good_line_idx)) * " lines due to matching nan or negative values.") end
+        lines_to_fit = lines_in_template[good_line_idx,:]
+      end
 
       if verbose println("# Fitting above lines in all spectra.")  end
       @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_to_fit )
