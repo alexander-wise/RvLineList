@@ -237,6 +237,8 @@ def getBlends(mask0, overlap_cutoff, allowBlends):
    """
    assert isinstance(mask0, pd.DataFrame)
    assert isinstance(overlap_cutoff, float)
+   if type(allowBlends) == np.ndarray:
+      allowBlends = list(allowBlends)
    assert (isinstance(allowBlends, list) or isinstance(allowBlends, int) or isinstance(allowBlends, float))
    maskCenters = mask0["lambda"]
    nm = len(mask0)
