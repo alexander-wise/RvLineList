@@ -257,7 +257,7 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
 
       good_line_idx = findall(.~(lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
 
-      if discard_neg_nan
+      if params[:discard_neg_nan]
         if verbose println("# Removing " * string(nrow(lines_in_template) - length(good_line_idx)) * " lines due to matching nan or negative values.") end
         lines_to_fit = lines_in_template[good_line_idx,:]
       end
