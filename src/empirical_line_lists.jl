@@ -35,10 +35,10 @@ function remove_and_track_nans_negatives!(order_list_timeseries::ACLT) where { A
       n_times = length(order_list_timeseries)
       n_orders = length(order_list_timeseries[1])
       n_pixels = length(order_list_timeseries[1][1].flux)
-      flux_nan_idx = zeros(Bool,n_times,n_orders,n_pixels) #note these 3-D boolean array sizes assume all orders in order_list_timeseries have the same number of pixels
-      flux_neg_idx = zeros(Bool,n_times,n_orders,n_pixels) 
-      var_nan_idx = zeros(Bool,n_times,n_orders,n_pixels) 
-      var_neg_idx = zeros(Bool,n_times,n_orders,n_pixels) 
+      flux_nan_idx = falses(n_times,n_orders,n_pixels) #note these 3-D boolean array sizes assume all orders in order_list_timeseries have the same number of pixels
+      flux_neg_idx = falses(n_times,n_orders,n_pixels) 
+      var_nan_idx = falses(n_times,n_orders,n_pixels) 
+      var_neg_idx = falses(n_times,n_orders,n_pixels) 
       for i in 1:n_times
         for j in 1:n_orders
           #check for nans in flux
@@ -65,10 +65,10 @@ function remove_and_track_nans_negatives!(order_list_timeseries::ACLT) where { A
       nan_idx = flux_nan_idx .| var_nan_idx
       #nan_idx = .|([nan_idx[i,:,:] for i in 1:n_times]...)
       """
-      flux_neg_idx = dropdims(sum(flux_neg_idx,dims=1),dims=1)
-      flux_nan_idx = dropdims(sum(flux_nan_idx,dims=1),dims=1)
-      var_neg_idx = dropdims(sum(var_neg_idx,dims=1),dims=1)
-      var_nan_idx = dropdims(sum(var_nan_idx,dims=1),dims=1)
+      flux_neg_idx_sum = dropdims(sum(flux_neg_idx,dims=1),dims=1)
+      flux_nan_idx_sum = dropdims(sum(flux_nan_idx,dims=1),dims=1)
+      var_neg_idx_sum = dropdims(sum(var_neg_idx,dims=1),dims=1)
+      var_nan_idx_sum = dropdims(sum(var_nan_idx,dims=1),dims=1)
 
 
       flux_neg_idx_bool = flux_neg_idx .!= 0
@@ -129,7 +129,7 @@ function match_bad_wavelength_intervals_with_lines(bad_waves::Matrix{Float64}, c
    @assert (size(bad_waves,2) == 3) && all(bad_waves[:,2] .< bad_waves[:,3]) # make the the bad wavelngths are given as intervals
    @assert ("pixels" in names(line_list)) && ("chunk_id" in names(line_list)) #make sure the line list has expected columns for line wavelengths
    n_lines = nrow(line_list)
-   bad_lines = zeros(Bool,n_lines)
+   bad_lines = falses(n_lines)
 
    for line in eachrow(line_list)
       λs = cl[line[:chunk_id]].λ[line[:pixels]]
