@@ -88,6 +88,9 @@ end
 #generate empirical NEID mask
 
 #set up output directories
+if !isdir(Params[:output_dir])
+   mkdir(Params[:output_dir])
+end
 if !isdir(joinpath(Params[:output_dir],"clean_masks"))
    mkdir(joinpath(Params[:output_dir],"clean_masks"))
 end
