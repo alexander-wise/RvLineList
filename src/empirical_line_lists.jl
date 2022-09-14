@@ -38,7 +38,11 @@ function remove_and_track_nans_negatives!(order_list_timeseries::ACLT) where { A
       flux_nan_idx = falses(n_times,n_orders,n_pixels) #note these 3-D boolean array sizes assume all orders in order_list_timeseries have the same number of pixels
       flux_neg_idx = falses(n_times,n_orders,n_pixels) 
       var_nan_idx = falses(n_times,n_orders,n_pixels) 
-      var_neg_idx = falses(n_times,n_orders,n_pixels) 
+      var_neg_idx = falses(n_times,n_orders,n_pixels)
+      flux_nan_idx_ij = falses(n_pixels)
+      flux_neg_idx_ij = falses(n_pixels)
+      var_nan_idx_ij = falses(n_pixels)
+      var_neg_idx_ij = falses(n_pixels)
       for i in 1:n_times
         for j in 1:n_orders
           #check for nans in flux
