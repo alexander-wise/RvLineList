@@ -347,7 +347,7 @@ end
 #combine NEID clean daily mean spectra from daily_ccfs files into a vector of type Spectra2DBasic
 function combine_NEID_daily_obs(params::Dict{Symbol,Any}, dates::Vector{Date})
    obs_list, manifest_list = get_NEID_daily_obs_list_and_manifest_list(params,dates)
-   @time obs_lambda_flux_var = [getindex.(Ref(load(fn)),["mean_lambda", "mean_clean_flux_continuum_normalized", "mean_clean_var_continuum_normalized"]) for fn in obs_list]
+   @time obs_lambda_flux_var = [getindex.(Ref(load(fn)),["mean_lambda", "mean_clean_flux_continuum_normalized", "mean_clean_var_continuum_normalized"]) for fn in obs_list] #Ref() is used here so we don't load the file 3 times per observation (once for each of λ, flux, and var fields)
    daily_rvs = zeros(length(manifest_list))
    for i in eachindex(manifest_list)
       manifest_i = CSV.read(manifest_list[i], DataFrame)
