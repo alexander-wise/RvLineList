@@ -233,7 +233,7 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       dont_need_to!(pipeline_plan, :template);
    end
 
-   
+
    if need_to(pipeline_plan,:fit_lines)
       if verbose println("# Initializing search for lines in template spectrum.")  end
       cl = ChunkList(map(grid->ChunkOfSpectrum(spectral_orders_matrix.λ,f_mean, var_mean, grid), spectral_orders_matrix.chunk_map), ones(Int64,length(spectral_orders_matrix.chunk_map)))
@@ -258,7 +258,7 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       lines_matching_nan_values = match_bad_wavelength_intervals_with_lines(nan_wavelength_intervals,cl,lines_in_template)
       lines_in_template[!, :neg_bad_line] = lines_matching_neg_values
       lines_in_template[!, :nan_bad_line] = lines_matching_nan_values
-
+      @assert (eltype(lines_in_template[!, :neg_bad_line]) == Bool) && (eltype(lines_in_template[!, :nan_bad_line]) == Bool) #make sure the next statement is comparing Booleans
       good_line_idx = findall(.~(lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
 
       if params[:discard_neg_nan]
