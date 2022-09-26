@@ -350,9 +350,9 @@ function combine_NEID_daily_obs(daily_ccfs_base_path::String, daily_ccf_fn::Stri
       index_minimum_hour_angle = argmin(abs.(manifest_i[:,"hour_angle"]))
       daily_rvs[i] = manifest_i[index_minimum_hour_angle,"ssbz"] * RvSpectML.speed_of_light_mps
    end
-   obs_lambda = [obs[1] for obs in obs_lambda_flux_var]
-   obs_flux = [obs[2] for obs in obs_lambda_flux_var]
-   obs_var = [obs[3] for obs in obs_lambda_flux_var]
+   obs_lambda = getindex.(obs_lambda_flux_var,1)
+   obs_flux = getindex.(obs_lambda_flux_var,2)
+   obs_var = getindex.(obs_lambda_flux_var,3)
    obs_metadata = [Dict{Symbol,Any}(:date=>dates[i], :rv_est=>daily_rvs[i], :bjd=>datetime2julian(DateTime(Dates.year(dates[i]), Dates.month(dates[i]), Dates.day(dates[i]), 12))) for i in 1:length(dates)]
    all_spectra = map(obs -> Spectra2DBasic(obs[1], obs[2], obs[3], NEID2D(), metadata=obs[4]), zip(obs_lambda,obs_flux,obs_var,obs_metadata))
    return all_spectra
