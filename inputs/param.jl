@@ -24,9 +24,6 @@ path_params = Dict(
 #:harpsn_data_path => "/home/awise/data/harps-n/",
 #:harps_data_path => "/home/awise/data/harps/",
 
-:pipeline_daily_ccfs_root_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/",
-:pipeline_daily_ccfs_root_path => "/home/awise/data/neid/solar/",
-
 #:neid_data_path => "/gpfs/group/ebf11/default/ebf11/neid_solar/data/pipeline/v1.1/L2/",
 #:neid_data_path => "/home/awise/data/neid/solar",
 
@@ -36,11 +33,14 @@ path_params = Dict(
 :pipeline_output_summary_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso/summary_espressoG2_norm=blaze&mask=1.csv",
 :pipeline_output_summary_path => "/home/awise/data/neid/solar/summary_espressoG2_norm=blaze&mask=1.csv",
 
-
-
+:daily_ccfs_base_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/",
+:daily_ccfs_base_path => "/home/awise/data/neid/solar/",
 #:daily_ccf_fn => "daily_ccfs_1.jld2",
 :daily_ccf_fn => "daily_ccfs_espressoG2_norm=cont&mask=3.jld2",
-:manifest_fn => "manifest.csv",
+
+:daily_manifests_base_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/manifest",
+:daily_manifests_base_path => "/home/awise/data/neid/solar/",
+:daily_manifest_fn => "manifest.csv",
 
 :output_dir => joinpath(pwd(),"outputs"),
 
