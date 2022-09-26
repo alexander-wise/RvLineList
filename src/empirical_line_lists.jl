@@ -182,7 +182,7 @@ Outputs:
 """
 function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=params[:output_dir], pipeline_plan::PipelinePlan = PipelinePlan(), verbose::Bool=true)
 
-   assert_params_exist(params, [:output_dir, :norm_type, :inst, :pipeline_output_path_ebf11, :pipeline_output_summary_path, :daily_ccf_fn, :manifest_fn, :orders_to_use, :fits_target_str, :line_width_50, :quant, :discard_neg_nan])
+   assert_params_exist(params, [:output_dir, :norm_type, :inst, :pipeline_daily_ccfs_root_path, :pipeline_output_summary_path, :daily_ccf_fn, :manifest_fn, :orders_to_use, :fits_target_str, :line_width_50, :quant, :discard_neg_nan])
 
    #isSolarData=false
    #output_dir = "outputs/masks/"
@@ -202,7 +202,7 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       if params[:inst] == :expres
          all_spectra = EXPRES_read_spectra(data_path) #note this is in expres_old.jl and needs to be loaded manually for now. Also this uses data_path and max_spectra_to_use param (not included in params_to_check since this is deprecated)
       elseif params[:inst] == :neid
-         all_spectra = combine_NEID_daily_obs(params[:pipeline_output_path_ebf11],get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100), params[:daily_ccf_fn], params[:manifest_fn])
+         all_spectra = combine_NEID_daily_obs(params[:pipeline_daily_ccfs_root_path],get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100), params[:daily_ccf_fn], params[:manifest_fn])
       else
          print("Error: spectra failed to load; inst not supported.")
       end
@@ -337,16 +337,16 @@ function get_NEID_best_days(pipeline_output_summary_path::String; startDate::Dat
 end
 
 #given a vector of dates, as well as filenames for ccf and manifest files, get a vector of all relevant file paths for these dates.
-function get_NEID_daily_obs_list_and_manifest_list(pipeline_output_path::String, dates::Vector{Date}, daily_ccf_fn::String, manifest_fn::String)
+function get_NEID_daily_obs_list_and_manifest_list(pipeline_daily_ccfs_root_path::String, dates::Vector{Date}, daily_ccf_fn::String, manifest_fn::String)
    date_dirs = reduce.(joinpath,split.(Dates.format.(dates,ISODateFormat),"-"))
-   obs_list = joinpath.(pipeline_output_path,date_dirs,daily_ccf_fn)
-   manifest_list = joinpath.(pipeline_output_path,date_dirs,manifest_fn)
+   obs_list = joinpath.(pipeline_daily_ccfs_root_path,date_dirs,daily_ccf_fn)
+   manifest_list = joinpath.(pipeline_daily_ccfs_root_path,date_dirs,manifest_fn)
    return obs_list, manifest_list
 end
 
 #combine NEID clean daily mean spectra from daily_ccfs files into a vector of type Spectra2DBasic
-function combine_NEID_daily_obs(pipeline_output_path::String, dates::Vector{Date}, daily_ccf_fn::String, manifest_fn::String)
-   obs_list, manifest_list = get_NEID_daily_obs_list_and_manifest_list(pipeline_output_path, dates, daily_ccf_fn, manifest_fn)
+function combine_NEID_daily_obs(pipeline_daily_ccfs_root_path::String, dates::Vector{Date}, daily_ccf_fn::String, manifest_fn::String)
+   obs_list, manifest_list = get_NEID_daily_obs_list_and_manifest_list(pipeline_daily_ccfs_root_path, dates, daily_ccf_fn, manifest_fn)
    @time obs_lambda_flux_var = [getindex.(Ref(load(fn)),["mean_lambda", "mean_clean_flux_continuum_normalized", "mean_clean_var_continuum_normalized"]) for fn in obs_list] #Ref() is used here so we don't load the file 3 times per observation (once for each of λ, flux, and var fields)
    daily_rvs = zeros(length(manifest_list))
    for i in eachindex(manifest_list)
