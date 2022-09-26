@@ -450,17 +450,16 @@ C_m_s = 2.99792458e8 #speed of light in m/s
 function fit_line_RV(flux::AbstractArray{T1,1}, var::AbstractArray{T2,1}, template_flux, deriv, idx::UnitRange) where { T1<:Real, T2<:Real }
    @assert length(flux) == length(var) == length(template_flux) == length(deriv)
 
-   #z = deriv[idx] \ (flux[idx] - template_flux[idx]) #unweighted z
-   z = ((1/sqrt.(var[idx]))' .* deriv[idx]) \ ((1/sqrt.(var[idx]))' .* (flux[idx] - template_flux[idx])) #weighted z
+   #z = 1 / (deriv[idx]' * deriv[idx]) * (deriv[idx]' * (flux[idx] - template_flux[idx])) #unweighted z
+
+   z = dot(deriv[idx] .* (flux[idx] - template_flux[idx]), 1/var[idx]) / dot(deriv[idx] .* deriv[idx], 1/var[idx]) #weighted z
+
+   #z1 = deriv[idx] \ (flux[idx] - template_flux[idx]) #this should be equal to unweighted z
+   #z1 = ((1/sqrt.(var[idx]))' .* deriv[idx]) \ ((1/sqrt.(var[idx]))' .* (flux[idx] - template_flux[idx])) #this should be equal to weighted z
    """
    scatter(flux[idx]-template_flux[idx],z*deriv[idx]) #visual check of the fit - should be a strong correlation here
    xlabel!("data - linear_interp(template)")
    ylabel!("z * d_template_d_z")
-
-   z1 = 1 / (deriv[idx]' * deriv[idx]) * (deriv[idx]' * (flux[idx] - template_flux[idx])) #this should be equal to unweighted z
-
-   z1 = dot(deriv[idx] .* (flux[idx] - template_flux[idx]), 1/var[idx]) / dot(deriv[idx] .* deriv[idx], 1/var[idx]) #this should be equal to weighted z
-
    """
 
    return z
