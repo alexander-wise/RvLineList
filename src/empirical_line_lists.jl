@@ -46,20 +46,20 @@ function remove_and_track_nans_negatives!(order_list_timeseries::ACLT) where { A
       for i in 1:n_times
         for j in 1:n_orders
           #check for nans in flux
-          flux_nan_idx_ij = isnan.(order_list_timeseries[i][j].flux)
+          flux_nan_idx_ij .= isnan.(order_list_timeseries[i][j].flux)
           flux_nan_idx[i,j,flux_nan_idx_ij] .= true
           order_list_timeseries[i][j].flux[flux_nan_idx_ij] .= 1.0
           #check for negative flux
-          flux_neg_idx_ij = order_list_timeseries[i][j].flux .< 0.0
+          flux_neg_idx_ij .= order_list_timeseries[i][j].flux .< 0.0
           flux_neg_idx[i,j,flux_neg_idx_ij] .= true
           order_list_timeseries[i][j].flux[flux_neg_idx_ij] .= 0.01
           order_list_timeseries[i][j].var[flux_neg_idx_ij] .= 1.0
           #check for nans in var
-          var_nan_idx_ij = isnan.(order_list_timeseries[i][j].var)
+          var_nan_idx_ij .= isnan.(order_list_timeseries[i][j].var)
           var_nan_idx[i,j,var_nan_idx_ij] .= true
           order_list_timeseries[i][j].var[var_nan_idx_ij] .= 1.0
           #check for negative var
-          var_neg_idx_ij = order_list_timeseries[i][j].var .< 0.0
+          var_neg_idx_ij .= order_list_timeseries[i][j].var .< 0.0
           var_neg_idx[i,j,var_neg_idx_ij] .= true
           order_list_timeseries[i][j].var[var_neg_idx_ij] .= 1.0
         end
