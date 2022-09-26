@@ -129,7 +129,7 @@ end
 
 
 """ Take in bad wavelength intervals and match with line list to flag lines as affected by a bad pixel. Output is a bit vector where 1 indicates a match"""
-function match_bad_wavelength_intervals_with_lines(bad_waves::Matrix{Float64}, cl::AbstractChunkList, line_list::DataFrame)
+function match_bad_wavelength_intervals_with_lines!(line_list::DataFrame, bad_waves::Matrix{Float64}, cl::AbstractChunkList; col_name::Symbol = :bad_line)
    @assert (size(bad_waves,2) == 3) && all(bad_waves[:,2] .< bad_waves[:,3]) # make the the bad wavelngths are given as intervals
    @assert ("pixels" in names(line_list)) && ("chunk_id" in names(line_list)) #make sure the line list has expected columns for line wavelengths
    n_lines = nrow(line_list)
@@ -147,8 +147,7 @@ function match_bad_wavelength_intervals_with_lines(bad_waves::Matrix{Float64}, c
          bad_lines[rownumber(line)] = true
       end
    end
-
-   return bad_lines
+   line_list[!, col_name] = bad_lines
 end
 
 """ Generate an empirical mask by finding spectral lines, fiting them with gaussians with a linear offset, and filtering the fitted line params
@@ -254,10 +253,8 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       #lines_in_template_logy = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=line_width_50,min_deriv2=0.5, use_logλ=true, use_logflux=true), verbose=false)  # TODO: Automate threshold for finding a line
       if verbose println("# Performing a fresh search for lines in template spectra.")  end
       @time lines_in_template = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=params[:line_width_50],min_deriv2=0.5, use_logλ=true, use_logflux=false), verbose=false)  # TODO: Automate threshold for finding a line
-      lines_matching_neg_values = match_bad_wavelength_intervals_with_lines(neg_wavelength_intervals,cl,lines_in_template)
-      lines_matching_nan_values = match_bad_wavelength_intervals_with_lines(nan_wavelength_intervals,cl,lines_in_template)
-      lines_in_template[!, :neg_bad_line] = lines_matching_neg_values
-      lines_in_template[!, :nan_bad_line] = lines_matching_nan_values
+      match_bad_wavelength_intervals_with_lines!(lines_in_template, neg_wavelength_intervals, cl, col_name = :neg_bad_line)
+      match_bad_wavelength_intervals_with_lines!(lines_in_template, nan_wavelength_intervals, cl, col_name = :nan_bad_line)
       @assert (eltype(lines_in_template[!, :neg_bad_line]) == Bool) && (eltype(lines_in_template[!, :nan_bad_line]) == Bool) #make sure the next statement is comparing Booleans
       good_line_idx = findall(.~(lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
 
