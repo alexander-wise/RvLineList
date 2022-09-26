@@ -39,12 +39,13 @@ path_params = Dict(
 
 
 #:daily_ccf_fn => "daily_ccfs_1.jld2",
-:daily_ccf_fn => "daily_ccfs_espressoG2_norm=cont&mask=3.jld2"
+:daily_ccf_fn => "daily_ccfs_espressoG2_norm=cont&mask=3.jld2",
 :manifest_fn => "manifest.csv",
 
 :output_dir => joinpath(pwd(),"outputs"),
 
 )
+
 merge!(Params,path_params)
 
 
@@ -137,8 +138,8 @@ end
 
 if Params[:inst] == :neid #we are using solar data
    push!(Params,:fits_target_str => "neid")
-   @assert haskey(Params,:neid_data_path)
-   push!(Params,:data_path => Params[:neid_data_path])
+   #@assert haskey(Params,:neid_data_path)
+   #push!(Params,:data_path => Params[:neid_data_path])
    push!(Params,:espresso_mask_filename => "G2.espresso.mas")
    push!(Params,:ccf_mid_velocity => 0.0)
 end
