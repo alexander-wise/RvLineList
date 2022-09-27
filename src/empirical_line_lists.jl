@@ -75,35 +75,37 @@ function remove_and_track_nans_negatives!(order_list_timeseries::ACLT) where { A
       var_nan_idx_sum = dropdims(sum(var_nan_idx,dims=1),dims=1)
 
 
-      flux_neg_idx_bool = flux_neg_idx .!= 0
-      flux_nan_idx_bool = flux_nan_idx .!= 0
-      var_neg_idx_bool = var_neg_idx .!= 0
-      var_nan_idx_bool = var_nan_idx .!= 0
+      flux_neg_idx_bool = flux_neg_idx_sum .!= 0
+      flux_nan_idx_bool = flux_nan_idx_sum .!= 0
+      var_neg_idx_bool = var_neg_idx_sum .!= 0
+      var_nan_idx_bool = var_nan_idx_sum .!= 0
 
-      flux_neg_idx2 = Float64.(flux_neg_idx)
-      flux_nan_idx2 = Float64.(flux_nan_idx)
-      var_neg_idx2 = Float64.(var_neg_idx)
-      var_nan_idx2 = Float64.(var_nan_idx)
+      flux_neg_idx2 = Float64.(flux_neg_idx_sum)
+      flux_nan_idx2 = Float64.(flux_nan_idx_sum)
+      var_neg_idx2 = Float64.(var_neg_idx_sum)
+      var_nan_idx2 = Float64.(var_nan_idx_sum)
 
       flux_neg_idx2[flux_neg_idx2 .== 0] .= NaN
       flux_nan_idx2[flux_nan_idx2 .== 0] .= NaN
       var_neg_idx2[var_neg_idx2 .== 0] .= NaN
       var_nan_idx2[var_nan_idx2 .== 0] .= NaN
 
-      using Colors
+      #using Colors
       using Plots
+      #using Plots.PlotMeasures
 
-      heatmap(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), .~(flux_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux negative values", size=(1600,800))
-      heatmap!(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), flux_neg_idx2, c=colormap("Greens"), label="flux negative")
 
-      heatmap(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), .~(flux_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux nan values", size=(1600,800))
-      heatmap!(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), flux_nan_idx2, c=colormap("Blues"), label="flux nan")
+      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(flux_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux negative values", size=(1600,800))# , margin=10mm)
+      heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), flux_neg_idx2, c=colormap("Greens"), label="flux negative")
 
-      heatmap(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), .~(var_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var neg values", size=(1600,800))
-      heatmap!(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), var_neg_idx2, c=colormap("Reds"), label="var negative")
+      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(flux_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux nan values", size=(1600,800))
+      heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), flux_nan_idx2, c=colormap("Blues"), label="flux nan")
 
-      heatmap(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), .~(var_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var nan values", size=(1600,800))
-      heatmap!(1:size(flux_neg_idx,2), 1:size(flux_neg_idx,1), var_nan_idx2, c=colormap("Purples"), label="var nan")
+      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(var_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var neg values", size=(1600,800))
+      heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), var_neg_idx2, c=colormap("Reds"), label="var negative")
+
+      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(var_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var nan values", size=(1600,800))
+      heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), var_nan_idx2, c=colormap("Purples"), label="var nan")
       """
 
 
@@ -201,7 +203,7 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       if params[:inst] == :expres
          all_spectra = EXPRES_read_spectra(data_path) #note this is in expres_old.jl and needs to be loaded manually for now. Also this uses data_path and max_spectra_to_use param (not included in params_to_check since this is deprecated)
       elseif params[:inst] == :neid
-         all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path],params[:daily_manifests_base_path],get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100), params[:daily_ccf_fn], params[:daily_manifest_fn])
+         all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100))
       else
          print("Error: spectra failed to load; inst not supported.")
       end
