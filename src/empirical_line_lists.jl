@@ -303,7 +303,7 @@ function select_line_fits_with_good_depth_width_slope(params::Dict{Symbol,Any}, 
    std_b_treshold = quantile(fit_distrib.std_b,quantile_threshold)
    std_a_treshold = quantile(fit_distrib.std_a,quantile_threshold)
    good_lines_alt = fit_distrib |>
-      @filter( 0.05 <= _.median_depth <= 0.95 ) |>
+      @filter( 0.05 <= _.median_depth <= 1.0 ) |>
       #@filter( sqrt.(_.median_σ²)./_.median_λc.*RvSpectML.speed_of_light_mps >= median_σ_width_treshold ) |>
       @filter( sqrt.(_.std_σ²)./_.median_λc.*RvSpectML.speed_of_light_mps <= std_σ_width_treshold ) |>
       @filter( _.std_b < std_b_treshold) |>
