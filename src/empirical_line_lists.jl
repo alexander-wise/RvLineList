@@ -92,20 +92,24 @@ function remove_and_track_nans_negatives!(order_list_timeseries::ACLT) where { A
 
       #using Colors
       using Plots
-      #using Plots.PlotMeasures
+      using Plots.PlotMeasures
 
 
-      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(flux_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux negative values", size=(1600,800))# , margin=10mm)
+      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(flux_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux negative values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
       heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), flux_neg_idx2, c=colormap("Greens"), label="flux negative")
+      savefig("/home/awise/Desktop/bad_pixel_plots/flux_neg_new.png")
 
-      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(flux_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux nan values", size=(1600,800))
+      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(flux_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux nan values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
       heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), flux_nan_idx2, c=colormap("Blues"), label="flux nan")
+      savefig("/home/awise/Desktop/bad_pixel_plots/flux_nan_new.png")
 
-      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(var_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var neg values", size=(1600,800))
+      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(var_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var neg values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
       heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), var_neg_idx2, c=colormap("Reds"), label="var negative")
+      savefig("/home/awise/Desktop/bad_pixel_plots/var_neg_new.png")
 
-      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(var_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var nan values", size=(1600,800))
+      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(var_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var nan values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
       heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), var_nan_idx2, c=colormap("Purples"), label="var nan")
+      savefig("/home/awise/Desktop/bad_pixel_plots/var_nan_new.png")
       """
 
 
