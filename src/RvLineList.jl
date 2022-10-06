@@ -36,6 +36,8 @@ using Statistics #objects used: quantile
 
 using Interpolations #objects used: LinearInterpolation
 
+using IntervalArithmetic #objects used: .. ∪ ∩
+
 using PyCall #makes it possible to call python functions from make_VALD_line_list.py in a julia environment
 import Pandas.DataFrame as pd_df #used to convert julia DataFrame to python pandas.DataFrame
 

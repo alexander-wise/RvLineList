@@ -10,134 +10,270 @@ function assert_params_exist(params::Dict{Symbol,Any}, params_to_check::Vector{S
    end
 end
 
-""" Get pixel wavelength boundaries for a chunk list timeseries """
-function get_pixel_boundaries(order_list_timeseries::ACLT) where { ACLT<:AbstractChunkListTimeseries }
+""" Get wavelength of pixel left edge for a given time t, order o, and pixel p """
+function get_pixel_left_edge(order_list_timeseries::ACLT, t::Int64, o::Int64, p::Int64) where { ACLT<:AbstractChunkListTimeseries }
+   λ = order_list_timeseries[t][o].λ
+   if p == 1
+      return λ[p] - ((λ[p+1] - λ[p]) / 2)
+   else
+      return (λ[p-1] + λ[p]) / 2
+   end
+end
+
+""" Get wavelength of pixel right edge for a given time t, order o, and pixel p """
+function get_pixel_right_edge(order_list_timeseries::ACLT, t::Int64, o::Int64, p::Int64) where { ACLT<:AbstractChunkListTimeseries }
+   λ = order_list_timeseries[t][o].λ
+   if p == length(λ)
+      return λ[p] + ((λ[p] - λ[p-1]) / 2)
+   else      
+      return (λ[p] + λ[p+1]) / 2
+   end
+end
+
+" Remove nans and negative values from chunk_list_timeseries and return a list of intervals for the wavelengths of affected pixels"
+function remove_and_track_nans_negatives!(chunk_list_timeseries::ACLT;
+   nan_wavelength_intervals::DataFrame = DataFrame(:chunk => Int[], :wavelength_intervals => Interval{Float64}[]), 
+   neg_wavelength_intervals::DataFrame = DataFrame(:chunk => Int[], :wavelength_intervals => Interval{Float64}[]), 
+   use_inst_bad_col_ranges::Bool = true, track_only_dont_remove::Bool = false) where { ACLT<:AbstractChunkListTimeseries }
+   """
+   chunk_list_timeseries = order_list_timeseries
+   nan_wavelength_intervals = DataFrame(:chunk => Int[], :wavelength_intervals => Interval{Float64}[])
+   neg_wavelength_intervals = DataFrame(:chunk => Int[], :wavelength_intervals => Interval{Float64}[])
+   use_inst_bad_col_ranges = true
+   track_only_dont_remove = true
+   """
+
+   @assert hasproperty(nan_wavelength_intervals,:chunk) && hasproperty(nan_wavelength_intervals,:wavelength_intervals) # make sure input DataFrame has the expected columns for wavelength intervals
+   @assert hasproperty(neg_wavelength_intervals,:chunk) && hasproperty(neg_wavelength_intervals,:wavelength_intervals) # make sure input DataFrame has the expected columns for wavelength intervals
+
+   #get inst and max pixels in order
+   inst = chunk_list_timeseries.inst
+   bad_idx_ij_max = falses(max_pixel_in_order(inst) - min_pixel_in_order(inst) + 1)
+
+   n_times = length(chunk_list_timeseries)
+   n_chunks = length(chunk_list_timeseries[1])
+   
+   current_interval::Interval{Float64} = 0..1 #initialze to reduce allocations in loops
+
+   for j in 1:n_chunks
+      #find the existing DataFrame rows for this chunk
+      nan_indices_j = findall(nan_wavelength_intervals[:,:chunk] .== j)
+      neg_indices_j = findall(neg_wavelength_intervals[:,:chunk] .== j)
+      #initialize a vector of intervals for nans and negs for this chunk
+      chunk_j_nan_wavelength_intervals = nan_wavelength_intervals[:,:wavelength_intervals][nan_indices_j]
+      chunk_j_neg_wavelength_intervals = neg_wavelength_intervals[:,:wavelength_intervals][neg_indices_j]
+      #remove the old Dataframe rows for this chunk, these will be replaced at the end of this for loop
+      #we do this to make sure the wavelength intervals for each chunk remain non_overlapping
+      deleteat!(nan_wavelength_intervals,nan_indices_j) 
+      deleteat!(neg_wavelength_intervals,neg_indices_j)
+
+      for i in 1:n_times
+         if use_inst_bad_col_ranges
+            #get indices of chunk in parent data
+            (pixels, ordr) = parentindices(chunk_list_timeseries[i][j].flux)
+            #get known bad pixel ranges
+            bad_ranges = bad_col_ranges(inst,ordr)
+            #convert parent pixel indices to chunk_list_timeseries pixel indices
+            for idx in eachindex(bad_ranges)
+               bad_ranges[idx] = intersect(bad_ranges[idx],pixels) .- (pixels[1] - 1)
+            end
+            #add bad pixels ranges to chunk_j_nan_wavelength_intervals
+            for r in bad_ranges
+               if length(r) > 0
+                  current_interval = get_pixel_left_edge(chunk_list_timeseries,i,j,r[1])..get_pixel_right_edge(chunk_list_timeseries,i,j,r[end])
+                  chunk_j_nan_wavelength_intervals = union_with_non_overlapping_intervals!(chunk_j_nan_wavelength_intervals,current_interval)
+               end
+            end
+         end
+         #check how many pixels are in this chunk, so we know how much of the preallocated bad_idx_ij_max to use
+         n_pixels = length(chunk_list_timeseries[i][j].flux)
+         bad_idx_ij = view(bad_idx_ij_max,1:n_pixels)
+         #check for nans in flux
+         bad_idx_ij .= isnan.(chunk_list_timeseries[i][j].flux)
+         for k in findall(bad_idx_ij)
+            current_interval = get_pixel_left_edge(chunk_list_timeseries,i,j,k)..get_pixel_right_edge(chunk_list_timeseries,i,j,k)
+            chunk_j_nan_wavelength_intervals = union_with_non_overlapping_intervals!(chunk_j_nan_wavelength_intervals,current_interval)
+         end
+         if !track_only_dont_remove
+            chunk_list_timeseries[i][j].flux[bad_idx_ij] .= 1.0
+         end
+         #check for negative flux
+         bad_idx_ij .= chunk_list_timeseries[i][j].flux .< 0.0
+         for k in findall(bad_idx_ij)
+            current_interval = get_pixel_left_edge(chunk_list_timeseries,i,j,k)..get_pixel_right_edge(chunk_list_timeseries,i,j,k)
+            chunk_j_neg_wavelength_intervals = union_with_non_overlapping_intervals!(chunk_j_neg_wavelength_intervals,current_interval)
+         end
+         if !track_only_dont_remove
+            chunk_list_timeseries[i][j].flux[bad_idx_ij] .= 0.01
+            chunk_list_timeseries[i][j].var[bad_idx_ij] .= 1.0
+         end
+         #check for nans in var
+         bad_idx_ij .= isnan.(chunk_list_timeseries[i][j].var)
+         for k in findall(bad_idx_ij)
+            current_interval = get_pixel_left_edge(chunk_list_timeseries,i,j,k)..get_pixel_right_edge(chunk_list_timeseries,i,j,k)
+            chunk_j_nan_wavelength_intervals = union_with_non_overlapping_intervals!(chunk_j_nan_wavelength_intervals,current_interval)
+         end
+         if !track_only_dont_remove
+            chunk_list_timeseries[i][j].var[bad_idx_ij] .= 1.0
+         end
+         #check for negative var
+         bad_idx_ij .= chunk_list_timeseries[i][j].var .< 0.0
+         for k in findall(bad_idx_ij)
+            current_interval = get_pixel_left_edge(chunk_list_timeseries,i,j,k)..get_pixel_right_edge(chunk_list_timeseries,i,j,k)
+            chunk_j_neg_wavelength_intervals = union_with_non_overlapping_intervals!(chunk_j_neg_wavelength_intervals,current_interval)
+         end
+         if !track_only_dont_remove
+         chunk_list_timeseries[i][j].var[bad_idx_ij] .= 1.0
+         end
+      end
+      chunk_j_nan_wavelength_intervals = discard_emptysets(chunk_j_nan_wavelength_intervals) #in a test run, 59% of neg wavelength intervals were empty sets
+      chunk_j_neg_wavelength_intervals = discard_emptysets(chunk_j_neg_wavelength_intervals) #in a test run, 6% of nan wavelength intervals were empty sets
+      chunk_j_nan_df = DataFrame(:chunk => fill(j,length(chunk_j_nan_wavelength_intervals)), :wavelength_intervals => chunk_j_nan_wavelength_intervals)
+      chunk_j_neg_df = DataFrame(:chunk => fill(j,length(chunk_j_neg_wavelength_intervals)), :wavelength_intervals => chunk_j_neg_wavelength_intervals)
+      append!(nan_wavelength_intervals,chunk_j_nan_df)
+      append!(neg_wavelength_intervals,chunk_j_neg_df)
+   end
+
+   return nan_wavelength_intervals, neg_wavelength_intervals
+end
+
+
+""" take the union of an interval with a vector of non-overlapping intervals """
+function union_with_non_overlapping_intervals!(non_overlapping_intervals::Vector{Interval{Float64}}, new_interval::Interval{Float64})
+   idx_overlap_first = zero(1)
+   for idx in eachindex(non_overlapping_intervals)
+      #loop through non_overlapping_intervals and check for overlap with each one
+      if new_interval ∩ non_overlapping_intervals[idx] != ∅
+         #keep track of the first index of overlap
+         if iszero(idx_overlap_first)
+            idx_overlap_first = idx
+            #combine the first overlapping interval with the new_interval
+            non_overlapping_intervals[idx_overlap_first] = non_overlapping_intervals[idx_overlap_first] ∪ new_interval
+         else
+            #combine with the interval at idx_overlap_first, which already includes new_interval
+            non_overlapping_intervals[idx_overlap_first] = non_overlapping_intervals[idx_overlap_first] ∪ non_overlapping_intervals[idx]
+            non_overlapping_intervals[idx] = ∅ #set the merged interval to \emptyset to preserve non_overlapping property
+         end
+      end
+   end
+   if iszero(idx_overlap_first)
+      return push!(non_overlapping_intervals,new_interval)
+   else
+      return non_overlapping_intervals
+   end
+end
+
+function discard_emptysets(intervals::Vector{Interval{Float64}})
+   return intervals[.!isequal.(intervals,∅)]
+end
+
+""" take a vector of intervals and combine the ones that overlap """
+function non_overlapping_intervals(possibly_overlapping_intervals::Vector{Interval{Float64}})
+   intervals = deepcopy(possibly_overlapping_intervals)
+   if length(intervals) > 1
+      for idx in eachindex(intervals)[2:end]
+         #loop through all previous intervals and check for overlap.
+         for idx2 in 1:(idx-1)
+            if intervals[idx] ∩ intervals[idx2] != ∅
+               #if the intervals overlap, combine them at the current index and set the earlier index to \emptyset
+               intervals[idx] = intervals[idx] ∪ intervals[idx2]
+               intervals[idx2] = ∅
+            end
+         end #for idx2 in 1:(idx-1)
+      end #for idx in eachindex(intervals)[2:end]
+   end #if length(intervals) > 1
+   return intervals[.!isequal.(intervals,∅)]
+end #function non_overlapping_intervals(intervals::Interval{Float64}[])
+
+
+""" debugging function used to show where negative and nan values are in flux and var """
+function make_save_bad_pixel_plots(order_list_timeseries::ACLT; outdir::String = "/home/awise/Desktop/bad_pixel_plots/") where { ACLT<:AbstractChunkListTimeseries }
+   #remove nans from data and track them
    n_times = length(order_list_timeseries)
    n_orders = length(order_list_timeseries[1])
    n_pixels = length(order_list_timeseries[1][1].flux)
-   λ_edges = zeros(n_times,n_orders,n_pixels,2)
-   for t in 1:n_times
-      for o in 1:n_orders
-         λ = order_list_timeseries[t][o].λ
-         dλ = λ[2:end] - λ[1:end-1]
-         dλ = [dλ[1];dλ;dλ[end]] / 2
-         for i in 1:n_pixels
-            λ_edges[t,o,i,:] = [λ[i] - dλ[i], λ[i] + dλ[i+1]]
-         end
-      end #for o in 1:n_orders
-   end # for t in 1:n_times
-   return λ_edges
+   flux_nan_idx = falses(n_times,n_orders,n_pixels) #note these 3-D boolean array sizes assume all orders in order_list_timeseries have the same number of pixels
+   flux_neg_idx = falses(n_times,n_orders,n_pixels) 
+   var_nan_idx = falses(n_times,n_orders,n_pixels) 
+   var_neg_idx = falses(n_times,n_orders,n_pixels)
+   flux_nan_idx_ij = falses(n_pixels)
+   flux_neg_idx_ij = falses(n_pixels)
+   var_nan_idx_ij = falses(n_pixels)
+   var_neg_idx_ij = falses(n_pixels)
+   for i in 1:n_times
+      for j in 1:n_orders
+         #check for nans in flux
+         flux_nan_idx_ij .= isnan.(order_list_timeseries[i][j].flux)
+         flux_nan_idx[i,j,flux_nan_idx_ij] .= true
+         #check for negative flux
+         flux_neg_idx_ij .= order_list_timeseries[i][j].flux .< 0.0
+         flux_neg_idx[i,j,flux_neg_idx_ij] .= true
+         #check for nans in var
+         var_nan_idx_ij .= isnan.(order_list_timeseries[i][j].var)
+         var_nan_idx[i,j,var_nan_idx_ij] .= true
+         #check for negative var
+         var_neg_idx_ij .= order_list_timeseries[i][j].var .< 0.0
+         var_neg_idx[i,j,var_neg_idx_ij] .= true
+      end
+   end
+   neg_idx = flux_neg_idx .| var_neg_idx
+   #neg_idx = .|([neg_idx[i,:,:] for i in 1:n_times]...)
+   nan_idx = flux_nan_idx .| var_nan_idx
+   #nan_idx = .|([nan_idx[i,:,:] for i in 1:n_times]...)
+
+   flux_neg_idx_sum = dropdims(sum(flux_neg_idx,dims=1),dims=1)
+   flux_nan_idx_sum = dropdims(sum(flux_nan_idx,dims=1),dims=1)
+   var_neg_idx_sum = dropdims(sum(var_neg_idx,dims=1),dims=1)
+   var_nan_idx_sum = dropdims(sum(var_nan_idx,dims=1),dims=1)
+
+
+   flux_neg_idx_bool = flux_neg_idx_sum .!= 0
+   flux_nan_idx_bool = flux_nan_idx_sum .!= 0
+   var_neg_idx_bool = var_neg_idx_sum .!= 0
+   var_nan_idx_bool = var_nan_idx_sum .!= 0
+
+   flux_neg_idx2 = Float64.(flux_neg_idx_sum)
+   flux_nan_idx2 = Float64.(flux_nan_idx_sum)
+   var_neg_idx2 = Float64.(var_neg_idx_sum)
+   var_nan_idx2 = Float64.(var_nan_idx_sum)
+
+   flux_neg_idx2[flux_neg_idx2 .== 0] .= NaN
+   flux_nan_idx2[flux_nan_idx2 .== 0] .= NaN
+   var_neg_idx2[var_neg_idx2 .== 0] .= NaN
+   var_nan_idx2[var_nan_idx2 .== 0] .= NaN
+
+   #using Colors
+   using Plots
+   using Plots.PlotMeasures
+
+   heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(flux_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux negative values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
+   heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), flux_neg_idx2, c=colormap("Greens"), label="flux negative")
+   savefig(joinpath(outdir,"flux_neg.png"))
+
+   heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(flux_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux nan values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
+   heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), flux_nan_idx2, c=colormap("Blues"), label="flux nan")
+   savefig(joinpath(outdir,"flux_nan.png"))
+
+   heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(var_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var neg values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
+   heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), var_neg_idx2, c=colormap("Reds"), label="var negative")
+   savefig(joinpath(outdir,"var_neg.png"))
+
+   heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(var_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var nan values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
+   heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), var_nan_idx2, c=colormap("Purples"), label="var nan")
+   savefig(joinpath(outdir,"var_nan.png"))
 end
 
-" Remove nans and negative values from order_list_timeseries and return a list of intervals for the wavelengths of affected pixels"
-function remove_and_track_nans_negatives!(order_list_timeseries::ACLT) where { ACLT<:AbstractChunkListTimeseries }
-      #remove nans from data and track them before making template spectra
-      n_times = length(order_list_timeseries)
-      n_orders = length(order_list_timeseries[1])
-      n_pixels = length(order_list_timeseries[1][1].flux)
-      flux_nan_idx = falses(n_times,n_orders,n_pixels) #note these 3-D boolean array sizes assume all orders in order_list_timeseries have the same number of pixels
-      flux_neg_idx = falses(n_times,n_orders,n_pixels) 
-      var_nan_idx = falses(n_times,n_orders,n_pixels) 
-      var_neg_idx = falses(n_times,n_orders,n_pixels)
-      flux_nan_idx_ij = falses(n_pixels)
-      flux_neg_idx_ij = falses(n_pixels)
-      var_nan_idx_ij = falses(n_pixels)
-      var_neg_idx_ij = falses(n_pixels)
-      for i in 1:n_times
-        for j in 1:n_orders
-          #check for nans in flux
-          flux_nan_idx_ij .= isnan.(order_list_timeseries[i][j].flux)
-          flux_nan_idx[i,j,flux_nan_idx_ij] .= true
-          order_list_timeseries[i][j].flux[flux_nan_idx_ij] .= 1.0
-          #check for negative flux
-          flux_neg_idx_ij .= order_list_timeseries[i][j].flux .< 0.0
-          flux_neg_idx[i,j,flux_neg_idx_ij] .= true
-          order_list_timeseries[i][j].flux[flux_neg_idx_ij] .= 0.01
-          order_list_timeseries[i][j].var[flux_neg_idx_ij] .= 1.0
-          #check for nans in var
-          var_nan_idx_ij .= isnan.(order_list_timeseries[i][j].var)
-          var_nan_idx[i,j,var_nan_idx_ij] .= true
-          order_list_timeseries[i][j].var[var_nan_idx_ij] .= 1.0
-          #check for negative var
-          var_neg_idx_ij .= order_list_timeseries[i][j].var .< 0.0
-          var_neg_idx[i,j,var_neg_idx_ij] .= true
-          order_list_timeseries[i][j].var[var_neg_idx_ij] .= 1.0
-        end
-      end
-      neg_idx = flux_neg_idx .| var_neg_idx
-      #neg_idx = .|([neg_idx[i,:,:] for i in 1:n_times]...)
-      nan_idx = flux_nan_idx .| var_nan_idx
-      #nan_idx = .|([nan_idx[i,:,:] for i in 1:n_times]...)
-      """
-      flux_neg_idx_sum = dropdims(sum(flux_neg_idx,dims=1),dims=1)
-      flux_nan_idx_sum = dropdims(sum(flux_nan_idx,dims=1),dims=1)
-      var_neg_idx_sum = dropdims(sum(var_neg_idx,dims=1),dims=1)
-      var_nan_idx_sum = dropdims(sum(var_nan_idx,dims=1),dims=1)
 
-
-      flux_neg_idx_bool = flux_neg_idx_sum .!= 0
-      flux_nan_idx_bool = flux_nan_idx_sum .!= 0
-      var_neg_idx_bool = var_neg_idx_sum .!= 0
-      var_nan_idx_bool = var_nan_idx_sum .!= 0
-
-      flux_neg_idx2 = Float64.(flux_neg_idx_sum)
-      flux_nan_idx2 = Float64.(flux_nan_idx_sum)
-      var_neg_idx2 = Float64.(var_neg_idx_sum)
-      var_nan_idx2 = Float64.(var_nan_idx_sum)
-
-      flux_neg_idx2[flux_neg_idx2 .== 0] .= NaN
-      flux_nan_idx2[flux_nan_idx2 .== 0] .= NaN
-      var_neg_idx2[var_neg_idx2 .== 0] .= NaN
-      var_nan_idx2[var_nan_idx2 .== 0] .= NaN
-
-      #using Colors
-      using Plots
-      using Plots.PlotMeasures
-
-
-      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(flux_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux negative values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
-      heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), flux_neg_idx2, c=colormap("Greens"), label="flux negative")
-      savefig("/home/awise/Desktop/bad_pixel_plots/flux_neg_new.png")
-
-      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(flux_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux nan values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
-      heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), flux_nan_idx2, c=colormap("Blues"), label="flux nan")
-      savefig("/home/awise/Desktop/bad_pixel_plots/flux_nan_new.png")
-
-      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(var_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var neg values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
-      heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), var_neg_idx2, c=colormap("Reds"), label="var negative")
-      savefig("/home/awise/Desktop/bad_pixel_plots/var_neg_new.png")
-
-      heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(var_nan_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="var nan values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
-      heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), var_nan_idx2, c=colormap("Purples"), label="var nan")
-      savefig("/home/awise/Desktop/bad_pixel_plots/var_nan_new.png")
-      """
-
-
-      pixel_boundaries = get_pixel_boundaries(order_list_timeseries)
-
-      neg_wavelength_intervals = zeros(sum(neg_idx),3)
-      for (i,idx) in enumerate(findall(neg_idx))
-         neg_wavelength_intervals[i,:] = [idx[2];pixel_boundaries[idx[1],idx[2],idx[3],:]]
-      end
-
-      nan_wavelength_intervals = zeros(sum(nan_idx),3)
-      for (i,idx) in enumerate(findall(nan_idx))
-         nan_wavelength_intervals[i,:] = [idx[2];pixel_boundaries[idx[1],idx[2],idx[3],:]]
-      end
-
-      return neg_wavelength_intervals, nan_wavelength_intervals
-end
-
-""" check if intervals a and b have any overlap """
+""" check if intervals a and b have any overlap using only their endpoints as input """
 function intervals_overlap(a_low::Float64, a_high::Float64, b_low::Float64, b_high::Float64)
    a_low <= b_high && b_low <= a_high
 end
 
 
 """ Take in bad wavelength intervals and match with line list to flag lines as affected by a bad pixel. Output is a bit vector where 1 indicates a match"""
-function match_bad_wavelength_intervals_with_lines!(line_list::DataFrame, bad_waves::Matrix{Float64}, cl::AbstractChunkList; col_name::Symbol = :bad_line)
-   @assert (size(bad_waves,2) == 3) && all(bad_waves[:,2] .< bad_waves[:,3]) # make the the bad wavelngths are given as intervals
-   @assert ("pixels" in names(line_list)) && ("chunk_id" in names(line_list)) #make sure the line list has expected columns for line wavelengths
+function match_bad_wavelength_intervals_with_lines!(line_list::DataFrame, bad_waves::DataFrame, cl::AbstractChunkList; col_name::Symbol = :bad_line)
+   @assert ("pixels" in names(line_list)) && ("chunk_id" in names(line_list)) #make sure line_list has the expected columns for line wavelengths
+   @assert hasproperty(bad_waves,:chunk) && hasproperty(bad_waves,:wavelength_intervals) # make sure bad_waves has the expected columns for wavelength intervals
    n_lines = nrow(line_list)
    bad_lines = falses(n_lines)
 
@@ -146,11 +282,14 @@ function match_bad_wavelength_intervals_with_lines!(line_list::DataFrame, bad_wa
       #check one extra pixel on each side of the line
       λlow = λs[1] - (λs[2]-λs[1])
       λhigh = λs[end] + (λs[end]-λs[end-1])
+      λ_interval = λlow..λhigh
       #find bad lines in the same chunk
-      bad_waves_in_chunk = findall(bad_waves[:,1] .== line[:chunk_id])
+      bad_waves_idx_in_chunk = findall(bad_waves[:,:chunk] .== line[:chunk_id])
       #look for overlap between line and any bad lines in the same chunk
-      if any(intervals_overlap.(bad_waves[bad_waves_in_chunk,2],bad_waves[bad_waves_in_chunk,3],λlow,λhigh))
-         bad_lines[rownumber(line)] = true
+      for bad_wavelength_interval in bad_waves[bad_waves_idx_in_chunk,:wavelength_intervals]
+         if bad_wavelength_interval ∩ λ_interval != ∅
+            bad_lines[rownumber(line)] = true
+         end
       end
    end
    line_list[!, col_name] = bad_lines
@@ -221,7 +360,7 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
    order_list_timeseries = extract_orders(all_spectra, pipeline_plan, orders_to_use=params[:orders_to_use], remove_bad_chunks=false, recalc=true);
 
    if verbose println("# Removing and tracking negative and nan values from spectra.") end
-   @time neg_wavelength_intervals, nan_wavelength_intervals = remove_and_track_nans_negatives!(order_list_timeseries)
+   @time nan_wavelength_intervals, neg_wavelength_intervals = remove_and_track_nans_negatives!(order_list_timeseries)
 
 
    if need_to(pipeline_plan, :template)  # Compute order CCF's & measure RVs
@@ -244,10 +383,8 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       cl = ChunkList(map(grid->ChunkOfSpectrum(spectral_orders_matrix.λ,f_mean, var_mean, grid), spectral_orders_matrix.chunk_map), ones(Int64,length(spectral_orders_matrix.chunk_map)))
       clt = ChunkListTimeseries([0.0], [cl], inst=first(all_spectra).inst, metadata=[Dict{Symbol,Any}()] )
       if verbose println("# Removing and tracking negative and nan values from template.") end
-      neg_wavelength_intervals_template, nan_wavelength_intervals_template = remove_and_track_nans_negatives!(clt)
-      #add neg/nan wavelength intervals from template to full list
-      neg_wavelength_intervals = sort([neg_wavelength_intervals;neg_wavelength_intervals_template],dims=1)
-      nan_wavelength_intervals = sort([nan_wavelength_intervals;nan_wavelength_intervals_template],dims=1)
+      #add neg/nan wavelength intervals from template to the original DataFrames
+      nan_wavelength_intervals, neg_wavelength_intervals = remove_and_track_nans_negatives!(clt, nan_wavelength_intervals=nan_wavelength_intervals, neg_wavelength_intervals=neg_wavelength_intervals, use_inst_bad_col_ranges=false)
 
       cl_derivs = ChunkList(map(grid->ChunkOfSpectrum(spectral_orders_matrix.λ, deriv, deriv2, grid), spectral_orders_matrix.chunk_map), ones(Int64,length(spectral_orders_matrix.chunk_map)))
       template_linear_interp = map(chid -> Interpolations.LinearInterpolation(cl[chid].λ,cl[chid].flux,extrapolation_bc=Flat()), 1:length(cl))
