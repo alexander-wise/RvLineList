@@ -17,6 +17,7 @@ using Query #objects used: @filter
 using RvSpectMLBase #objects used: read_data_paths
 
 using EchelleInstruments #objects used: NEID, EXPRES, HARPSN
+#could use reexport to not have to use EchelleInstruments.function() for functions EchelleInstruments exports
 export NEID, EXPRES, HARPS, HARPSN
 
 import EchelleCCFs:λ_air_to_vac #objects used: EchelleCCFs.λ_air_to_vac
@@ -33,6 +34,10 @@ import Printf #objects used: @sprintf
 
 using Statistics #objects used: quantile
 
+using Interpolations #objects used: LinearInterpolation
+
+using IntervalArithmetic #objects used: .. ∪ ∩
+
 using PyCall #makes it possible to call python functions from make_VALD_line_list.py in a julia environment
 import Pandas.DataFrame as pd_df #used to convert julia DataFrame to python pandas.DataFrame
 
@@ -42,7 +47,7 @@ export read_mask_air, read_mask_vacuum, binMask
 export get_param_range, get_lambda_range, get_depth_range
 
 #normaliation of EXPRES spectra - this file will not be needed once these functions are replaced with working versions from EchelleInstruments
-include("expres_norm.jl")
+#include("expres_norm.jl")
 
 #empirical mask generation
 include("empirical_line_lists.jl")
