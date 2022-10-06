@@ -243,8 +243,8 @@ function make_save_bad_pixel_plots(order_list_timeseries::ACLT; outdir::String =
    var_nan_idx2[var_nan_idx2 .== 0] .= NaN
 
    #using Colors
-   using Plots
-   using Plots.PlotMeasures
+   #using Plots
+   #using Plots.PlotMeasures
 
    heatmap(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), .~(flux_neg_idx_bool), c="black", xlabel="order #", ylabel="pixel #", title="flux negative values", size=(1600,800), left_margin=7mm, bottom_margin=5mm)
    heatmap!(1:size(flux_neg_idx_sum,2), 1:size(flux_neg_idx_sum,1), flux_neg_idx2, c=colormap("Greens"), label="flux negative")
