@@ -74,12 +74,12 @@ linelist_params = Dict(
 
 # lineprops = lineprops_101501 #which VALD line list to use in mask creation - not works in param file yet because mask names do not use this param as they should
 #maskWavelengths = string("Reiners",target) #keyword for mask wavelengths - should be e.g. Reiners or Reiners101501
-:allowBlends => [0,1,2,3,4,5,6,7,8,9], #number of blends allowed with each line, e.g. 0 for single lines only, 1 for doublets only, [0,1] for singlets and doublets
-:overlap_cutoff => 0.0e-5, #distance between lines required for them to be categorized as a blend, expressed as a fraction of the speed of light
+:allowBlends => 0, #number of blends allowed with each line, e.g. 0 for single lines only, 1 for doublets only, [0,1] for singlets and doublets
+:overlap_cutoff => 2.0e-5, #distance between lines required for them to be categorized as a blend, expressed as a fraction of the speed of light
 :depth_cutoff => 0.05,
 :iron1Only => "all", # which species to use - options are "Fe1", "nonFe1", "all"
 :badLineFilter => "none", #which mask to use to filter out bad line - only lines within ~ 3 km/s of one of these mask lines will be kept
-:rejectTelluricSlope => 0.0, #derivative of spectrum required for telluric line rejection - a value of 0 turns off telluric rejection
+:rejectTelluricSlope => 2000.0, #derivative of spectrum required for telluric line rejection - a value of 0 turns off telluric rejection
 :nbin => 1, #number of mask subdivisions to make
 #bin_n = 1, #which subdivision to use - one is first
 :binParam => :depth, #which mask parameter to bin multiple masks by - only important for subdividing masks - can be :depth or :lambda
@@ -88,7 +88,7 @@ linelist_params = Dict(
 
 # Empirical mask params
 :discard_neg_nan => true, #whether or not lines affected by negative / nan values should be discarded
-:quant => "100", #quantile for stability of fit params for empirical masks
+:quant => "90", #quantile for stability of fit params for empirical masks
 #min_frac_converged = "90", #minimum fraction of the line fits that converged in the dataset for the empirical line to be used
 :line_width_50 => 7392.0, #NEID solar line width for ESPRESSO G2 mask, mask_scale_factor = 2.0, other ccf params default values
 
