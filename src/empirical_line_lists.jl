@@ -326,12 +326,15 @@ Outputs:
 """
 function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=params[:output_dir], pipeline_plan::PipelinePlan = PipelinePlan(), verbose::Bool=true)
 
-   assert_params_exist(params, [:output_dir, :norm_type, :inst, :daily_ccfs_base_path, :daily_manifests_base_path, :pipeline_output_summary_path, :daily_ccf_fn, :daily_manifest_fn, :orders_to_use, :fits_target_str, :line_width_50, :quant, :discard_neg_nan])
+   """
+   params = Params
+   output_dir = params[:output_dir]
+   pipeline_plan = PipelinePlan()
+   verbose = true
+   """
 
-   #isSolarData=false
-   #output_dir = "outputs/masks/"
-   #pipeline_plan = PipelinePlan()
-   #verbose = true
+   assert_params_exist(params, [:output_dir, :norm_type, :inst, :daily_ccfs_base_path, :daily_manifests_base_path, :pipeline_output_summary_path, :daily_ccf_fn, :daily_manifest_fn, :orders_to_use, :fits_target_str, :line_width_50, :min_frac_converged, :quant])
+
    reset_all_needs!(pipeline_plan) #TODO: revise module PipelinePlan or my usage of the module so this line is not needed.
 
    #if verbose println("# Reading in customized parameters from param.jl.")  end
