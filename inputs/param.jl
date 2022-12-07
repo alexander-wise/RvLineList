@@ -89,7 +89,7 @@ linelist_params = Dict(
 # Empirical mask params
 #:discard_neg_nan => true, #whether or not lines affected by negative / nan values should be discarded #commented out as this now happens by default
 :quant => "90", #quantile for stability of fit params for empirical masks, expressed as a string out of 100
-#min_frac_converged = "90", #minimum fraction of the line fits that converged in the dataset for the empirical line to be used
+:min_frac_converged => "100", #minimum fraction of the line fits that converged in the dataset for the empirical line to be used, expressed as a string out of 100
 :line_width_50 => 7392.0, #NEID solar line width for ESPRESSO G2 mask, mask_scale_factor = 2.0, other ccf params default values
 
 )
