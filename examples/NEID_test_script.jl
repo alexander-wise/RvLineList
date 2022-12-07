@@ -36,8 +36,8 @@ s = ArgParseSettings()
    "--output_dir"
       help = "directory to save mask outputs in"
       arg_type = String
-   "--VALD_output"
-      help = "whether or not to carry VALD line data through to the final mask"
+   "--long_output"
+      help = "whether or not to carry all available line data through to the final mask"
       arg_type = Bool
 end
 
@@ -79,9 +79,9 @@ if parsed_args["output_dir"] !== nothing
    Params[:output_dir] = parsed_args["output_dir"]
 end
 
-if parsed_args["VALD_output"] !== nothing
-   println("Found command-line arg VALD_output. Overwriting param file definition of this arg.")
-   Params[:VALD_output] = parsed_args["VALD_output"]
+if parsed_args["long_output"] !== nothing
+   println("Found command-line arg long_output. Overwriting param file definition of this arg.")
+   Params[:long_output] = parsed_args["long_output"]
 end
 
 
@@ -155,7 +155,7 @@ binned_masks = binMask(mask, Params[:nbin], binParam=Params[:binParam])
 #rename!(binned_masks[1], [:lambda, :depth])
 
 for bin_n in 1:Params[:nbin]
-   saveStr = "RvLineList" * "_allowBlends="*string(Params[:allowBlends]) * "_overlapcutoff="*string(Params[:overlap_cutoff]) * "_rejectTelluricSlope="*string(Params[:rejectTelluricSlope]) * "_badLineFilter="*Params[:badLineFilter]* "_quant="*Params[:quant] * "_nbin="*string(Params[:nbin]) * "_DP="*string(Params[:depthPercentile]) * "_binParam="*string(Params[:binParam]) * "_n="*string(bin_n) * "_VALD_output="*string(Params[:VALD_output]) * "_VACUUM" * ".csv"
+   saveStr = "RvLineList" * "_allowBlends="*string(Params[:allowBlends]) * "_overlapcutoff="*string(Params[:overlap_cutoff]) * "_rejectTelluricSlope="*string(Params[:rejectTelluricSlope]) * "_badLineFilter="*Params[:badLineFilter]* "_quant="*Params[:quant] * "_nbin="*string(Params[:nbin]) * "_DP="*string(Params[:depthPercentile]) * "_binParam="*string(Params[:binParam]) * "_n="*string(bin_n) * "_long_output="*string(Params[:long_output]) * "_VACUUM" * ".csv"
    CSV.write(joinpath(Params[:output_dir],"clean_masks",saveStr),binned_masks[bin_n])
 end
 
@@ -171,7 +171,7 @@ end
 """
 
 mask1 = RvLineList.read_mask_air(joinpath(pkgdir(RvLineList),"inputs","ESPRESSO_masks","G2.espresso.mas"))
-mask2 = RvLineList.read_mask(joinpath("/home/awise/Desktop/neid_masks/clean_masks","RvLineList_allowBlends=0_overlapcutoff=2.0e-5_rejectTelluricSlope=2000.0_badLineFilter=none,_quant=90_nbin=1_DP=true_binParam=depth_n=1_VALD_output=false_VACUUM.csv"))
+mask2 = RvLineList.read_mask(joinpath("/home/awise/Desktop/neid_masks/clean_masks","RvLineList_allowBlends=0_overlapcutoff=2.0e-5_rejectTelluricSlope=2000.0_badLineFilter=none,_quant=90_nbin=1_DP=true_binParam=depth_n=1_long_output=false_VACUUM.csv"))
 
 using Plots, JLD2, FileIO
 

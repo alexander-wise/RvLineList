@@ -16,7 +16,7 @@ if Params[:max_spectra_to_use] < 200
    println("Warning: param.jl setting max_spectra_to_use to " * string(Params[:max_spectra_to_use]))
 end
 
-push!(Params,:VALD_output => true) #whether or not to carry VALD line data through to the final mask
+push!(Params,:long_output => true) #whether or not to carry all line data through to the final mask
 
 path_params = Dict(
 #:expres_data_path => "/home/awise/data/expres/"),
