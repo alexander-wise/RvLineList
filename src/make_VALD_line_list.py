@@ -361,14 +361,11 @@ def hasMaskMatch(mask, maskWavelengthsAreVacuum, line_width=1e-5, mask_name='G2.
 
 
 #Use a VALD line list to make an RV line list. Note the output is converted to vacuum wavelengths by default.
-def getVALDmasks(nbin=1, binParam = "depth", lineprops=lineprops_G2, iron1Only='all', depthPercentile=True, overlap_cutoff=1e-5, depth_cutoff=0.05, maskWavelengths = 'Reiners', allowBlends=0, rejectTelluricSlope=0.0, badLineFilter='none', outputVacuumWavelengths=True, saveMasks=False, outdir_masks = outdir_masks):
+def getVALDmasks(lineprops=lineprops_G2, iron1Only='all', overlap_cutoff=1e-5, depth_cutoff=0.05, maskWavelengths = 'Reiners', allowBlends=0, rejectTelluricSlope=0.0, badLineFilter='none', outputVacuumWavelengths=True, saveMasks=False, outdir_masks = outdir_masks):
    #lineprops are lambdas, excitation energies, oscillator strengths, and depths
    """
-   nbin=1
-   binParam = "depth"
    lineprops=lineprops_G2
    iron1Only='all'
-   depthPercentile=True
    overlap_cutoff=1e-5
    depth_cutoff=0.05
    maskWavelengths='Reiners'
@@ -455,31 +452,34 @@ def getVALDmasks(nbin=1, binParam = "depth", lineprops=lineprops_G2, iron1Only='
             mask0["lambda"] = airVacuumConversion(mask0["lambda"], toAir=False)
             lineprops["lambda"] = airVacuumConversion(lineprops["lambda"], toAir=False)
 
+   #binning the masks has been removed from this python function as it is now being used in RvLineList, and binning should only be done after all filters are applied. Binning can be accomplished in julia; see masks.jl/binMask().
+   """
    #get line indices for each bin
    bins = {}
    if depthPercentile: #this should be updated to include Arvind's normalization functions
-      pSorted = np.argsort(lineprops[binParam])
-      dCumSum = np.cumsum(lineprops["depth"].iloc[pSorted])
+      pSorted = np.argsort(lineprops_filtered[binParam])
+      dCumSum = np.cumsum(lineprops_filtered["depth"].iloc[pSorted])
       for i in range(nbin):
          dLower = dCumSum.iloc[-1]/nbin * i
          dUpper = dCumSum.iloc[-1]/nbin * (i+1)
          bins[i] = pSorted.iloc[np.where((dCumSum >= dLower) & (dCumSum <= dUpper))[0]]
    else:
-      pmin = np.amin(lineprops[binParam])
-      pmax = np.amax(lineprops[binParam])
+      pmin = np.amin(lineprops_filtered[binParam])
+      pmax = np.amax(lineprops_filtered[binParam])
       prange = pmax-pmin
       for i in range(nbin):
          #plower = pmin + (prange / nbin * i)
-         plower = np.percentile(lineprops[binParam], 100./nbin * i)
+         plower = np.percentile(lineprops_filtered[binParam], 100./nbin * i)
          #pupper = pmin + (prange / nbin * (i+1))
-         pupper = np.percentile(lineprops[binParam], 100./nbin * (i+1))
-         bins[i] = np.where((lineprops[binParam] >= plower) & (lineprops[binParam] < pupper))[0]
+         pupper = np.percentile(lineprops_filtered[binParam], 100./nbin * (i+1))
+         bins[i] = np.where((lineprops_filtered[binParam] >= plower) & (lineprops_filtered[binParam] < pupper))[0]
+   
 
-   #construct the masks using either the original or fitted lambdas
+   #sort the mask and save it if saveMasks=True
    masks = {}
    masks_long = {}
    for i in range(nbin):
-      masks[i] = mask0.iloc[bins[i]]
+      masks[i] = mask.iloc[bins[i]]
       masks_long[i] = lineprops.iloc[bins[i]]
       masks[i] = masks[i].iloc[np.argsort(masks[i]["lambda"])] #sort masks by wavelength
       masks_long[i] = masks_long[i].iloc[np.argsort(masks_long[i]["lambda"])] #sort masks by wavelength
@@ -488,7 +488,16 @@ def getVALDmasks(nbin=1, binParam = "depth", lineprops=lineprops_G2, iron1Only='
          np.savetxt(os.path.join(outdir_masks, saveStr + '.mas'), masks[i])
          np.savetxt(os.path.join(outdir_masks, saveStr + '_long.mas'), masks_long[i])
          np.save(os.path.join(outdir_bins, saveStr + '.npy'), lineprops[binParam].iloc[bins[i]])
-   return masks, masks_long
+   """
+
+   mask_out = mask_filtered.iloc[np.argsort(mask_filtered["lambda"])].reset_index(drop=True) #sort masks by wavelength
+   mask_long_out = lineprops.iloc[np.argsort(lineprops["lambda"])] #sort masks by wavelength
+   if saveMasks:
+      saveStr = 'VALD'+'_species='+iron1Only+'_depthcutoff='+str(depth_cutoff)+'_overlapcutoff='+str(overlap_cutoff)+'_allowBlends='+(','.join(str(j) for j in allowBlends) if isinstance(allowBlends,list) else str(allowBlends))+'_badLineFilter='+badLineFilter+'_rejectTelluricSlope='+str(rejectTelluricSlope)+'_waves='+maskWavelengths+("_VACUUM" if outputVacuumWavelengths else "_AIR")
+      np.savetxt(os.path.join(outdir_masks, saveStr + '.mas'), mask_out)
+      np.savetxt(os.path.join(outdir_masks, saveStr + '_long.mas'), mask_long_out)
+      #np.save(os.path.join(outdir_bins, saveStr + '.npy'), lineprops[binParam].iloc[bins[i]])
+   return mask_out, mask_long_out
 
 
 
