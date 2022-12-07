@@ -119,9 +119,7 @@ end
 import Pandas.DataFrame as pd_df
 
 @pyinclude("src/make_VALD_line_list.py")
-@time VALD_masks, VALD_masks_long = py"getVALDmasks"(overlap_cutoff=Params[:overlap_cutoff], depth_cutoff=Params[:depth_cutoff], iron1Only=Params[:iron1Only], badLineFilter=Params[:badLineFilter], allowBlends=Params[:allowBlends])
-VALD_mask = VALD_masks[0]
-VALD_mask_long = VALD_masks_long[0]
+@time VALD_mask, VALD_mask_long = py"getVALDmasks"(overlap_cutoff=Params[:overlap_cutoff], depth_cutoff=Params[:depth_cutoff], iron1Only=Params[:iron1Only], badLineFilter=Params[:badLineFilter], allowBlends=Params[:allowBlends])
 
 
 empirical_mask_3col = select(empirical_mask,[:median_λc, :median_depth, :line_id])
