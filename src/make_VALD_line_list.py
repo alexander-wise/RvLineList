@@ -372,85 +372,126 @@ def getVALDmasks(lineprops=lineprops_G2, iron1Only='all', overlap_cutoff=1e-5, d
    allowBlends=0
    rejectTelluricSlope=0.0
    badLineFilter='ESPRESSOG2'
+   outputVacuumWavelengths=True
    """
    #local variable to track whether wavelengths are air or vacuum
    maskWavelengthsAreVacuum = False #initialized to false because VALD lineprops variables are read in as air wavelengths
 
-   #add a column of random numbers to lineprops to test whether the effects we see are real - to test this use binParam = "random"
+   #add a column of random numbers to lineprops to test whether the effects we see are real - to test this use binParam = "random" when binning the masks
    randnums = np.random.rand(len(lineprops))
    lineprops["random"] = randnums
 
-   #apply line depth cutoff
+   #add an index column so we can track the original VALD index of each line
+   lineprops["VALD_index"] = np.array(range(len(lineprops)), dtype=int)
+
+   #initialize filtering columns (this is the order they are calculated in)
+   lineprops["bool_filter_depth_cutoff"] = np.ones(len(lineprops), bool)
+   lineprops["blend_number"] = np.zeros(len(lineprops), int)
+   lineprops["bool_filter_allowBlends"] = np.ones(len(lineprops), bool)
+   lineprops["bool_filter_iron1Only"] = np.ones(len(lineprops), bool)
+   lineprops["bool_filter_rejectTelluricSlope"] = np.ones(len(lineprops), bool)
+   lineprops["bool_filter_badLineFilter"] = np.ones(len(lineprops), bool)
+   lineprops["passed_all_bool_filters"] = np.zeros(len(lineprops), bool)
+
+
+   #apply depth_cutoff filter
    #in older version, strictly_no_overlap=True meant overlap_cutoff = 4e-5 and depth_cutoff=0.05
-   keep_indices = np.where(lineprops["depth"] >= depth_cutoff)[0]
-   lineprops = lineprops.iloc[keep_indices]
+   lineprops["bool_filter_depth_cutoff"] = (lineprops["depth"] >= depth_cutoff)
 
    #start the mask from lineprops
-   mask0 = lineprops[["lambda","depth"]].copy(deep=True)
+   mask = lineprops[["lambda","depth"]].copy(deep=True)
+   mask_depth_filtered = mask.loc[lineprops["bool_filter_depth_cutoff"]].reset_index(drop=True) #this is only for use in getBlends
 
-   #trim mask to only include non-overlapping lines - this happens before any other filtering, since other filters could remove part of a blend
-   olisBoolean = getBlends(mask0, overlap_cutoff, allowBlends)[0]
-   mask0 = mask0[olisBoolean]
-   lineprops = lineprops[olisBoolean]
+   #trim mask to only include non-overlapping lines
+   # this intentionally happens after the depth filtering, so depth_cutoff is assumed to be small enough such that lines with lesser depths are insignifciant contributors to blends
+   # this necessarily happens before any other filtering, since other filters could remove part of a blend
+   olisBoolean, nOverlap = getBlends(mask_depth_filtered, overlap_cutoff, allowBlends)
+
+   #update lineprops with blend numbers. blend_number=-1 is assigned to lines not considered because they have depth below depth_cutoff
+   lineprops.loc[~lineprops["bool_filter_depth_cutoff"], "blend_number"] = -1
+   lineprops.loc[lineprops["bool_filter_depth_cutoff"], "blend_number"] = nOverlap
+
+   #apply allowBlends filter
+   #mask0 = mask0[olisBoolean]
+   #lineprops = lineprops[olisBoolean]
+   lineprops.loc[~lineprops["bool_filter_depth_cutoff"], "bool_filter_allowBlends"] = False
+   lineprops.loc[lineprops["bool_filter_depth_cutoff"], "bool_filter_allowBlends"] = olisBoolean
 
    if 'Reiners' in maskWavelengths:
       coef_factors = {'':1.0, '101501':0.48, '10700':0.47, '26965':0.36, '34411':0.76} #from alex_sandbox.jl / get_line_shapes.jl code to generate plots of line RV vs depth
       baseline_RVs = {'':0.0, '101501':-5.0e3, '10700':-16640.0, '26965':-40320.0, '34411':66500.0}
       coef_factor = coef_factors[maskWavelengths[7:]]
       reinersEQ2 = lambda d: coef_factor*(-504.891 - 43.7963*d - 145.56*d*d + 884.308*d*d*d) #Multiple of all the coefficients in reiners et al. 2016 for HD101501
-      dVs = reinersEQ2(mask0["depth"]) + baseline_RVs[maskWavelengths[7:]]
-      mask0["lambda"] = mask0["lambda"] * (1.0+dVs/C_m_s)
+      dVs = reinersEQ2(mask["depth"]) + baseline_RVs[maskWavelengths[7:]]
+      mask["lambda"] = mask["lambda"] * (1.0+dVs/C_m_s)
       lineprops["lambda"] = lineprops["lambda"] * (1.0+dVs/C_m_s)
 
-   #only keep Fe 1 lines or all but Fe 1 lines:
+   #apply iron1Only filter
+   assert iron1Only in ['Fe1', 'nonFe1', 'all'], "ERROR: invalid iron1Only code. Must be 'Fe1', 'nonFe1', or 'all'"
+   #only keep Fe 1 lines, all lines except Fe 1 lines, or all lines:
    isFe1 = lineprops["species"]=="'Fe 1'"
    if iron1Only=='Fe1':
-      mask0 = mask0[isFe1]
-      lineprops = lineprops[isFe1]
+      #mask0 = mask0[isFe1]
+      #lineprops = lineprops[isFe1]
+      lineprops["bool_filter_iron1Only"] = isFe1
    elif iron1Only=='nonFe1':
-      mask0 = mask0[~isFe1]
-      lineprops = lineprops[~isFe1]
+      #mask0 = mask0[~isFe1]
+      #lineprops = lineprops[~isFe1]
+      lineprops["bool_filter_iron1Only"] = ~isFe1
    elif iron1Only=='all':
-      pass
-   else:
-      print('ERROR: invalid iron1Only code!')
+      #pass
+      lineprops["bool_filter_iron1Only"] = True
 
+   #apply rejectTelluricSlope filter
    #reject mask entries too close to a telluric line
    if rejectTelluricSlope != 0.:
-      too_close_to_telluric = getTelluricIndices(mask0, maskWavelengthsAreVacuum, overlap_cutoff, vel_slope_threshold=rejectTelluricSlope)
-      mask0 = mask0[~too_close_to_telluric]
-      lineprops = lineprops[~too_close_to_telluric]
+      too_close_to_telluric = getTelluricIndices(mask, maskWavelengthsAreVacuum, overlap_cutoff, vel_slope_threshold=rejectTelluricSlope)
+      #mask0 = mask0[~too_close_to_telluric]
+      #lineprops = lineprops[~too_close_to_telluric]
+      lineprops["bool_filter_rejectTelluricSlope"] = ~too_close_to_telluric
 
+   #apply badLineFilter filter
    #badLineFilter contains a few different options that attempt to remove bad lines from the mask
-   if 'ESPRESSO' in badLineFilter: #only keep mask entries with a corresponding ESPRESSO mask entry
+   if 'ESPRESSO' in badLineFilter: #only keep mask entries with a corresponding ESPRESSO mask entry. if badLineFilter=ESPRESSOstrict, then also only keep mask lines if there is only 1 mask line that matches the corresponding ESPRESSO mask entry, but it's okay if multiple ESPRESSO mask entries correspond to the same mask line.
       mask_label = badLineFilter[8:10]
-      hem = hasMaskMatch(mask0, maskWavelengthsAreVacuum, mask_name=mask_label+".espresso.mas", allowMultipleMatches=False if ('strict' in badLineFilter) else True)
-      mask0 = mask0[hem]
-      lineprops = lineprops[hem]
-
-   if badLineFilter[:2] == "HD":
-      hasMatch = hasMaskMatch(mask0, maskWavelengthsAreVacuum, mask_name=badLineFilter[2:]+"_good_lines_fit_quant=0.90.csv", allowMultipleMatches=True)
-      mask0 = mask0[hasMatch]
-      lineprops = lineprops[hasMatch]
-
-   if badLineFilter[:2] == "20":
-      hasMatch = hasMaskMatch(mask0, maskWavelengthsAreVacuum, mask_name=badLineFilter[:8]+"_good_lines_fit_quant=1.00.csv", allowMultipleMatches=True)
-      mask0 = mask0[hasMatch]
-      lineprops = lineprops[hasMatch]
-
-   if badLineFilter=='ExcitationEnergy': #only keep mask entries with EE > 0.2 eV and EE < 8 eV. These thresholds are chosen to exclude the balmer series (EE>8 eV), and the line most sensitive to stellar activity (these tend to have EE < 0.2).
+      hasMatch = hasMaskMatch(mask, maskWavelengthsAreVacuum, mask_name=mask_label+".espresso.mas", allowMultipleMatches=False if ('strict' in badLineFilter) else True)
+      #mask0 = mask0[hasMatch]
+      #lineprops = lineprops[hasMatch]
+      lineprops["bool_filter_badLineFilter"] = hasMatch
+   elif badLineFilter[:2] == "HD":
+      hasMatch = hasMaskMatch(mask, maskWavelengthsAreVacuum, mask_name=badLineFilter[2:]+"_good_lines_fit_quant=0.90.csv", allowMultipleMatches=True)
+      #mask0 = mask0[hasMatch]
+      #lineprops = lineprops[hasMatch]
+      lineprops["bool_filter_badLineFilter"] = hasMatch
+   elif badLineFilter[:2] == "20":
+      hasMatch = hasMaskMatch(mask, maskWavelengthsAreVacuum, mask_name=badLineFilter[:8]+"_good_lines_fit_quant=1.00.csv", allowMultipleMatches=True)
+      #mask0 = mask0[hasMatch]
+      #lineprops = lineprops[hasMatch]
+      lineprops["bool_filter_badLineFilter"] = hasMatch
+   elif badLineFilter=='ExcitationEnergy': #only keep mask entries with EE > 0.2 eV and EE < 8 eV. These thresholds are chosen to exclude the balmer series (EE>8 eV), and the lines most sensitive to stellar activity (these tend to have EE < 0.2).
       okayExcitationEnergy = np.where((lineprops["excitation_energy"]>0.2)&(lineprops["excitation_energy"]<8.))[0]
-      mask0 = mask0[okayExcitationEnergy]
-      lineprops = lineprops[okayExcitationEnergy]
+      #mask0 = mask0[okayExcitationEnergy]
+      #lineprops = lineprops[okayExcitationEnergy]
+      lineprops["bool_filter_badLineFilter"] = okayExcitationEnergy
+   elif badLineFilter == "none":
+      lineprops["bool_filter_badLineFilter"] = True
+   else:
+      print("Warning: badLineFilter code not recognized, defaulting to badLineFilter=none")
+      lineprops["bool_filter_badLineFilter"] = True
 
-   #convert air to vacuum if necessary.
+   #convert air to vacuum if necessary
    if outputVacuumWavelengths != maskWavelengthsAreVacuum:
       if maskWavelengthsAreVacuum:
-            mask0["lambda"] = airVacuumConversion(mask0["lambda"], toAir=True)
+            mask["lambda"] = airVacuumConversion(mask["lambda"], toAir=True)
             lineprops["lambda"] = airVacuumConversion(lineprops["lambda"], toAir=True)
       else:
-            mask0["lambda"] = airVacuumConversion(mask0["lambda"], toAir=False)
+            mask["lambda"] = airVacuumConversion(mask["lambda"], toAir=False)
             lineprops["lambda"] = airVacuumConversion(lineprops["lambda"], toAir=False)
+
+   #check which lines passed all bool filters
+   passed_all_bool_filters = lineprops["bool_filter_depth_cutoff"] & lineprops["bool_filter_allowBlends"] & lineprops["bool_filter_iron1Only"] & lineprops["bool_filter_rejectTelluricSlope"] & lineprops["bool_filter_badLineFilter"]
+   lineprops["passed_all_bool_filters"] = passed_all_bool_filters
+   mask_filtered = mask.loc[passed_all_bool_filters]
 
    #binning the masks has been removed from this python function as it is now being used in RvLineList, and binning should only be done after all filters are applied. Binning can be accomplished in julia; see masks.jl/binMask().
    """
