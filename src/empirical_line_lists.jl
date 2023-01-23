@@ -327,7 +327,7 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
    """
    params = Params
    output_dir = params[:output_dir]
-   pipeline_plan = PipelinePlan()
+   pipeline_plan = RvLineList.PipelinePlan()
    verbose = true
    """
 
@@ -405,8 +405,10 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       bad_line_idx = findall((lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
       if verbose println("# Found " * string(nrow(lines_in_template) - length(good_line_idx)) * " lines contaminated by nan or negative values.") end
 
-      if verbose println("# Fitting all lines in all spectra.")  end
-      @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_in_template )
+      lines_to_fit = lines_in_template[good_line_idx,:]
+
+      if verbose println("# Fitting uncontaminated lines in all spectra.")  end
+      @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_to_fit )
       #@time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_in_template )
    
       if save_data(pipeline_plan,:fit_lines)
@@ -422,11 +424,17 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
    #select lines with good frac converged, median depth, std velocity width, and local continuum slope
    fit_distrib_df = select_line_fits_with_good_depth_width_slope(params, fits_to_lines, parse(Float64,params[:quant]) / 100, verbose=verbose, output_dir=output_dir, fits_target_str=params[:fits_target_str])
 
-   #add neg/nan filters to the Dataframe
-   fit_distrib_df[!,:bool_filter_neg_bad_line] = .~lines_in_template[:, :neg_bad_line]
-   fit_distrib_df[!,:bool_filter_nan_bad_line] = .~lines_in_template[:, :nan_bad_line]
+   #create a new Dataframe with full line_in_template size to track neg/nan lines
+   df_total = similar(fit_distrib_df,size(lines_in_template,1))
+   df_total[good_line_idx,:] = fit_distrib_df
+   #fix the line_ids since the fits didn't know about the neg/nan lines
+   df_total[good_line_idx,:line_id] = good_line_idx
+   df_total[bad_line_idx,:line_id] = bad_line_idx
+   #add neg/nan columns to the Dataframe
+   df_total[!,:bool_filter_neg_bad_line] = .~lines_in_template[:, :neg_bad_line]
+   df_total[!,:bool_filter_nan_bad_line] = .~lines_in_template[:, :nan_bad_line]
 
-   return fit_distrib_df
+   return df_total
 
 end #end function generateEmpiricalMask()
 
@@ -445,16 +453,29 @@ function select_line_fits_with_good_depth_width_slope(params::Dict{Symbol,Any}, 
                    std_a=std(_.fit_a), std_b=std(_.fit_b), std_depth=std(_.fit_depth), std_σ²=std(_.fit_σ²), std_λc=std(_.fit_λc),
                    line_id=first(_.line_id),  frac_converged=mean(_.fit_converged)  } ) |> DataFrame
 
-   std_depth_threshold = quantile(fit_distrib.std_depth,quantile_threshold)
-   median_σ_width_threshold = 2000 # quantile(sqrt.(fit_distrib.median_σ²)./fit_distrib.median_λc.*RvSpectML.speed_of_light_mps,1-quantile_threshold)
-   std_σ_width_threshold = quantile(sqrt.(fit_distrib.std_σ²)./fit_distrib.median_λc.*RvSpectML.speed_of_light_mps,quantile_threshold)
-   std_b_threshold = quantile(fit_distrib.std_b,quantile_threshold)
-   std_a_threshold = quantile(fit_distrib.std_a,quantile_threshold)
-
+   #apply min_frac_converged filter before calculating quantile thresholds
    fit_distrib[!,:bool_filter_min_frac_converged] = fit_distrib.frac_converged .>= min_frac_converged
+   converged_idx = findall(fit_distrib[:,:bool_filter_min_frac_converged])
+   not_converged_idx = findall(.~(fit_distrib[:,:bool_filter_min_frac_converged]))
+   filtered_fit_distrib = fit_distrib[converged_idx,:]   
+
+   #calculate quantile thresholds
+   #std_depth_threshold = quantile(filtered_fit_distrib.std_depth,quantile_threshold)
+   #median_σ_width_threshold = 2000 # quantile(sqrt.(filtered_fit_distrib.median_σ²)./filtered_fit_distrib.median_λc.*RvSpectML.speed_of_light_mps,1-quantile_threshold)
+   std_σ_width_threshold = quantile(sqrt.(filtered_fit_distrib.std_σ²)./filtered_fit_distrib.median_λc.*RvSpectML.speed_of_light_mps,quantile_threshold)
+   std_b_threshold = quantile(filtered_fit_distrib.std_b,quantile_threshold)
+   #std_a_threshold = quantile(filtered_fit_distrib.std_a,quantile_threshold)
+
+   #compute remaining boolean filters
    fit_distrib[!,:bool_filter_median_depth_between_5percent_and_1] = 0.05 .<= fit_distrib.median_depth .<= 1.0
    fit_distrib[!,:bool_filter_std_velocity_width_quant] = sqrt.(fit_distrib.std_σ²)./fit_distrib.median_λc.*RvSpectML.speed_of_light_mps .<= std_σ_width_threshold 
    fit_distrib[!,:bool_filter_std_local_continuum_slope_quant] = fit_distrib.std_b .<= std_b_threshold
+
+   #assign missing value to not_converged fits
+   allowmissing!(fit_distrib)
+   fit_distrib[not_converged_idx,:bool_filter_median_depth_between_5percent_and_1] .= missing
+   fit_distrib[not_converged_idx,:bool_filter_std_velocity_width_quant] .= missing
+   fit_distrib[not_converged_idx,:bool_filter_std_local_continuum_slope_quant] .= missing
 
    #good_lines_alt = fit_distrib |>
    #   @filter( 0.05 <= _.median_depth <= 1.0 ) |>
