@@ -444,6 +444,15 @@ end #end function generateEmpiricalMask()
 #adapted from: RvSpectML.jl/examples/expres_analyze_line_by_line.jl
 function select_line_fits_with_good_depth_width_slope(params::Dict{Symbol,Any}, line_fits_df::DataFrame, quantile_threshold::Real; verbose::Bool = false, output_dir::String = "", fits_target_str::String = "" )
 
+   """
+   params = params
+   line_fits_df = fits_to_lines
+   quantile_threshold = parse(Float64,params[:quant]) / 100
+   verbose=verbose
+   output_dir=output_dir
+   fits_target_str=params[:fits_target_str]
+   """
+
    assert_params_exist(params, [:inst, :min_frac_converged])
 
    min_frac_converged = parse(Float64,params[:min_frac_converged]) / 100
