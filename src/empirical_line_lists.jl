@@ -388,10 +388,11 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       if verbose println("# Removing and tracking negative and nan values from template.") end
       #add neg/nan wavelength intervals from template to the original DataFrames
       nan_wavelength_intervals, neg_wavelength_intervals = remove_and_track_nans_negatives!(clt, nan_wavelength_intervals=nan_wavelength_intervals, neg_wavelength_intervals=neg_wavelength_intervals, use_inst_bad_col_ranges=false)
-
+      """ #setup code for measuring RVs using template matching technique -- currently not used
       cl_derivs = ChunkList(map(grid->ChunkOfSpectrum(spectral_orders_matrix.λ, deriv, deriv2, grid), spectral_orders_matrix.chunk_map), ones(Int64,length(spectral_orders_matrix.chunk_map)))
       template_linear_interp = map(chid -> Interpolations.LinearInterpolation(cl[chid].λ,cl[chid].flux,extrapolation_bc=Flat()), 1:length(cl))
       template_deriv_linear_interp = map(chid -> Interpolations.LinearInterpolation(cl_derivs[chid].λ,cl_derivs[chid].flux,extrapolation_bc=Flat()), 1:length(cl_derivs))
+      """
       # We're done with the spectral_orders_matrix, so we can release the memory now
       spectral_orders_matrix = nothing
       GC.gc()
@@ -412,14 +413,14 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       end
 
       if verbose println("# Fitting above lines in all spectra.")  end
-      @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_to_fit )
-      @time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_to_fit )
+      @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_in_template )
+      #@time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_in_template )
    
       if save_data(pipeline_plan,:fit_lines)
          CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_lines.csv"), lines_in_template )
-         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_good_lines.csv"), lines_to_fit )
+         #CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_good_lines.csv"), lines_to_fit )
          CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_fits.csv"), fits_to_lines )
-         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_RVs.csv"), line_RVs )
+         #CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_RVs.csv"), line_RVs )
       end
    
       dont_need_to!(pipeline_plan,:fit_lines);
