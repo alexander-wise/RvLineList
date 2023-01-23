@@ -402,6 +402,7 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       match_bad_wavelength_intervals_with_lines!(lines_in_template, nan_wavelength_intervals, cl, col_name = :nan_bad_line)
       @assert (eltype(lines_in_template[!, :neg_bad_line]) == Bool) && (eltype(lines_in_template[!, :nan_bad_line]) == Bool) #make sure these are Booleans so the next line is valid
       good_line_idx = findall(.~(lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
+      bad_line_idx = findall((lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
       if verbose println("# Found " * string(nrow(lines_in_template) - length(good_line_idx)) * " lines contaminated by nan or negative values.") end
 
       if verbose println("# Fitting all lines in all spectra.")  end
@@ -409,8 +410,8 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       #@time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_in_template )
    
       if save_data(pipeline_plan,:fit_lines)
-         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_lines.csv"), lines_in_template )
-         #CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_good_lines.csv"), lines_to_fit )
+         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_accepted_lines.csv"), lines_to_fit )
+         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_rejected_lines.csv"), lines_in_template[bad_line_idx,:] )
          CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_fits.csv"), fits_to_lines )
          #CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_RVs.csv"), line_RVs )
       end
