@@ -109,6 +109,17 @@ RvLineList.RvSpectMLBase.Pipeline.save_data!(pipeline_plan, :fit_lines) #tell th
 
 @time empirical_mask = generateEmpiricalMask(Params, output_dir=Params[:output_dir], pipeline_plan=pipeline_plan)
 
+#rename columns median_λc and median_depth to lambda and depth
+rename!(empirical_mask, :median_λc => :lambda)
+rename!(empirical_mask, :median_depth => :depth)
+
+#filter empirical mask to only contain good lines according to empirical mask flags
+#empirical_mask_filtered = empirical_mask[ (empirical_mask[:,:bool_filter_min_frac_converged]
+#         .&& empirical_mask[:,:bool_filter_median_depth_between_5percent_and_1]
+#         .&& empirical_mask[:,:bool_filter_std_velocity_width_quant]
+#         .&& empirical_mask[:,:bool_filter_std_local_continuum_slope_quant]
+#         .&& empirical_mask[:,:bool_filter_neg_bad_line] .&& empirical_mask[:,:bool_filter_nan_bad_line]), :]
+
 using PyCall
 try
    pyimport("pandas") #make sure pandas is installed
@@ -121,16 +132,30 @@ import Pandas.DataFrame as pd_df
 @pyinclude("src/make_VALD_line_list.py")
 @time VALD_mask, VALD_mask_long = py"getVALDmasks"(overlap_cutoff=Params[:overlap_cutoff], depth_cutoff=Params[:depth_cutoff], iron1Only=Params[:iron1Only], badLineFilter=Params[:badLineFilter], allowBlends=Params[:allowBlends])
 
-
-empirical_mask_3col = select(empirical_mask,[:median_λc, :median_depth, :line_id])
-rename!(empirical_mask_3col, [:lambda, :depth, :line_id])
+#empirical_mask_3col = select(empirical_mask_filtered,[:lambda, :depth, :line_id])
+#rename!(empirical_mask_3col, [:lambda, :depth, :line_id])
 #debug empirical_mask_2col = CSV.read(joinpath(output_dir,"RvLineList_species=all_depthcutoff=0.05_overlapcutoff=1.0e-5_allowBlends=0_badLineFilter=none_rejectTelluricSlope=0.0_nbin=1_DP=true_binParam=depth_n=0_VACUUM.csv"), DataFrame)
 #debug empirical_mask_2col = Dict(pairs(eachcol(empirical_mask_2col)))
 
+#empirical_mask_pd = Params[:long_output] ? pd_df(empirical_mask) : pd_df(empirical_mask_3col) 
+empirical_mask_pd = pd_df(empirical_mask)
 
-empirical_mask_pd = pd_df(empirical_mask_3col)
+#combined_mask = py"mask_intersection"(empirical_mask_pd, Params[:long_output] ? VALD_mask_long : VALD_mask, threshold=500.0)
+combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
 
-combined_mask = py"mask_intersection"(empirical_mask_pd, Params[:VALD_output] ? VALD_mask_long : VALD_mask, threshold=500.0)
+"""
+thresholds = [100,200,300,400,500,600,700,800,900,1000,1200,1400,1600,1800,2000,2500,3000,3500,4000,4500,5000,5500,6000]
+lengths = zeros(length(thresholds))
+for i in 1:length(thresholds)
+   @time lengths[i] = length(py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=thresholds[i]))
+end
+using Plots
+plot(thresholds,lengths, legend=false)
+xlims!(0,2000)
+xlabel!("velocity threshold")
+ylabel!("number of total mask matches found")
+savefig("/home/awise/Desktop/mask_matching_cutoff.png")
+"""
 
 function pd_df_to_df(df_pd)
    df = DataFrame()
