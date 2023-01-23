@@ -167,9 +167,28 @@ end
 
 combined_mask_df = pd_df_to_df(combined_mask)
 
+#combined_mask_df[!,:VALD_index] = convert.(Int,combined_mask_df[!,:VALD_index])
+
 telluric_indices = py"getTelluricIndices"(combined_mask, true, Params[:overlap_cutoff], vel_slope_threshold=Params[:rejectTelluricSlope], RV_offset = 0.0, RV_range = 1e-4)
 
-mask = combined_mask_df[map(!,telluric_indices),:]
+combined_mask_df[!,:bool_filter_rejectTelluricSlope] = map(!,telluric_indices)
+
+combined_mask_df[!,:passed_all_bool_filters] = (combined_mask_df[:,:bool_filter_min_frac_converged]
+.&& combined_mask_df[:,:bool_filter_median_depth_between_5percent_and_1]
+.&& combined_mask_df[:,:bool_filter_std_velocity_width_quant]
+.&& combined_mask_df[:,:bool_filter_std_local_continuum_slope_quant]
+.&& combined_mask_df[:,:bool_filter_neg_bad_line]
+.&& combined_mask_df[:,:bool_filter_nan_bad_line]
+.&& combined_mask_df[:,:bool_filter_depth_cutoff]
+.&& combined_mask_df[:,:bool_filter_allowBlends]
+.&& combined_mask_df[:,:bool_filter_iron1Only]
+.&& combined_mask_df[:,:bool_filter_rejectTelluricSlope]
+.&& combined_mask_df[:,:bool_filter_badLineFilter])
+
+combined_mask_df_filtered = combined_mask_df[ combined_mask_df[!,:passed_all_bool_filters], :]
+
+mask = combined_mask_df_filtered
+
 
 mask.weight = mask.depth
 
