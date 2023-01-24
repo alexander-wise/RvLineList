@@ -86,3 +86,102 @@ end
 function get_lambda_range(mask::DataFrame, lambda_min::Number, lambda_max::Number)
    get_param_range(mask, :lambda, lambda_min, lambda_max)
 end
+
+
+
+
+#check if two mask wavelengths are within 50 m/s (approx 0.001 angstroms)
+#VALD numerical precision is 0.0001 angstroms, or about 5 m/s. This number (50 m/s) was chosen to be a factor of a few greater than VALD precision at all wavelengths we consider.
+function wave_equal(w1, w2; threshold::Number=50.0)
+   if isequal(w1,missing) || isequal(w2,missing)
+      return false
+   else
+      return (abs(w1-w2)/((w1+w2)/2)) < (threshold / C_m_s)
+   end
+end
+
+
+
+#take the intersection of two masks (pandas 2d dataframes) to generate one sub_mask
+function mask_intersection(mask1::DataFrame, mask2::DataFrame; default_data::String="first", add_label_column::Bool=false, combine_mask_data::Bool=true, threshold::Number=50.0)
+   """
+   Take the intersection of two masks to generate one submask. Two mask entries are treated as equal if they have wavelengths (lambdas) within threshold (50 m/s by default) of each other, or if they are both equal to the same third mask entry.
+
+   Parameters:
+      mask1: mask #1 including columns for lambda (required) and depth (required if default_data="max_depth")
+
+      mask2: mask #2 including columns for lambda (required) and depth (required if default_data="max_depth")
+
+      default_data: keyword for which mask data to preserve in the case of matching (intersecting) lines - all but one are discarded.
+         Posible values:
+            "first" defaults to mask1's data for matches across masks. Will default to max_depth for matches within masks.
+            "max_depth" picks the line with max depth in the case of a match. If multiple lines with the same max depth, defaults to the lower lambda line within the match.
+
+      add_label_column: whether or not to add a column, "mask_df_name", to the output supermask containing labels "mask1" and "mask2" tracking which input mask each output mask entry originated from.
+
+      combine_mask_data: whether or not to add extra data in mask2 to mask1 (only works when default_data=="first")
+
+      threshold: velocity (in m/s) separation between adjacent mask entries for them to be considered equal.
+
+   Returns:
+      sub_mask: intersection of mask1 and mask2, sorted by lambda
+   """
+   @assert (isequal(default_data,"first") || isequal(default_data,"max_depth")) "ERROR: invalid default_data selection."
+
+   @assert (("lambda" in names(mask1)) && ("lambda" in names(mask2))) "ERROR: lambda column not found."
+   if ("depth" in names(mask1)) && ("depth" in names(mask2))
+      hasDepths=true
+   else
+      @assert (default_data != "max_depth") "ERROR: max_depth selected but depth keyword missing from mask1.columns or mask2.columns."
+      hasDepths=false
+   end
+   mask1sorted = sort(mask1,[:lambda])
+   mask2sorted = sort(mask2,[:lambda])
+   mask1sorted[!,"mask_df_name"] .= "mask1"
+   mask2sorted[!,"mask_df_name"] .= "mask2"
+   sub_mask = DataFrame()
+   mask12combined = vcat(mask1sorted,mask2sorted, cols=:union)
+   mask12sorted = sort(mask12combined, [:lambda])
+   m12 = mask12sorted[!,:lambda]
+   i=1
+   while i < (length(m12)) #loop through combined mask index i
+      j=1
+      match_i = [i]
+      while wave_equal(m12[i+j-1],m12[i+j],threshold=threshold)
+         append!(match_i,i+j)
+         j+=1
+      end
+      if j > 1 #if there are any matches to mask index i
+         matches = mask12sorted[match_i,:]
+         mask1matches = matches[:,"mask_df_name"] .== "mask1"
+         mask2matches = matches[:,"mask_df_name"] .== "mask2"
+         if (any(mask1matches) && any(mask2matches))
+            if default_data == "first"
+               matches1 = matches[mask1matches,:]
+               matches2 = matches[mask2matches,:]
+               max_depth_match1 = DataFrame(matches1[findmax(matches1[:,:depth])[2],:])
+               max_depth_match2 = DataFrame(matches2[findmax(matches2[:,:depth])[2],:])
+               if combine_mask_data
+                 for k in names(mask2)
+                     if ismissing(max_depth_match1[1,k])
+                        max_depth_match1[!,k] .= max_depth_match2[1,k]
+                     end
+                  end
+               end
+               append!(sub_mask,max_depth_match1)
+            else
+               max_depth_match = DataFrame(matches[findmax(matches[:,:depth])[2],:])
+               append!(sub_mask,max_depth_match)
+            end
+         end
+      end
+      i += j
+   end
+   if add_label_column
+      sub_mask_out = sub_mask
+   else
+      sub_mask_out = select!(sub_mask, Not([:mask_df_name]))
+   end
+   return sort(sub_mask_out,[:lambda])
+end
+

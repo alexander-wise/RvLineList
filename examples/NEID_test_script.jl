@@ -138,10 +138,10 @@ import Pandas.DataFrame as pd_df
 #debug empirical_mask_2col = Dict(pairs(eachcol(empirical_mask_2col)))
 
 #empirical_mask_pd = Params[:long_output] ? pd_df(empirical_mask) : pd_df(empirical_mask_3col) 
-empirical_mask_pd = pd_df(empirical_mask)
+#empirical_mask_pd = pd_df(empirical_mask)
 
 #combined_mask = py"mask_intersection"(empirical_mask_pd, Params[:long_output] ? VALD_mask_long : VALD_mask, threshold=500.0)
-combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
+#combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
 
 """
 thresholds = [100,200,300,400,500,600,700,800,900,1000,1200,1400,1600,1800,2000,2500,3000,3500,4000,4500,5000,5500,6000]
@@ -165,11 +165,19 @@ function pd_df_to_df(df_pd)
    df
 end
 
-combined_mask_df = pd_df_to_df(combined_mask)
+VALD_mask_long_df = pd_df_to_df(VALD_mask_long)
+VALD_mask_long_df[!,:species] .= convert.(String,VALD_mask_long_df[!,:species])
+
+combined_mask_df = mask_intersection(empirical_mask, VALD_mask_long_df, threshold=500.0)
+
+combined_mask_pd = pd_df(combined_mask_df)
+
+#combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
+#combined_mask_df = pd_df_to_df(combined_mask)
 
 #combined_mask_df[!,:VALD_index] = convert.(Int,combined_mask_df[!,:VALD_index])
 
-telluric_indices = py"getTelluricIndices"(combined_mask, true, Params[:overlap_cutoff], vel_slope_threshold=Params[:rejectTelluricSlope], RV_offset = 0.0, RV_range = 1e-4)
+telluric_indices = py"getTelluricIndices"(combined_mask_pd, true, Params[:overlap_cutoff], vel_slope_threshold=Params[:rejectTelluricSlope], RV_offset = 0.0, RV_range = 1e-4)
 
 combined_mask_df[!,:bool_filter_rejectTelluricSlope] = map(!,telluric_indices)
 
