@@ -138,10 +138,10 @@ import Pandas.DataFrame as pd_df
 #debug empirical_mask_2col = Dict(pairs(eachcol(empirical_mask_2col)))
 
 #empirical_mask_pd = Params[:long_output] ? pd_df(empirical_mask) : pd_df(empirical_mask_3col) 
-#empirical_mask_pd = pd_df(empirical_mask)
+empirical_mask_pd = pd_df(empirical_mask)
 
 #combined_mask = py"mask_intersection"(empirical_mask_pd, Params[:long_output] ? VALD_mask_long : VALD_mask, threshold=500.0)
-#combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
+combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
 
 """
 thresholds = [100,200,300,400,500,600,700,800,900,1000,1200,1400,1600,1800,2000,2500,3000,3500,4000,4500,5000,5500,6000]
@@ -165,99 +165,71 @@ function pd_df_to_df(df_pd)
    df
 end
 
-VALD_mask_long_df = pd_df_to_df(VALD_mask_long)
-VALD_mask_long_df[!,:species] .= convert.(String,VALD_mask_long_df[!,:species])
-
-combined_mask_df = mask_intersection(empirical_mask, VALD_mask_long_df, threshold=500.0)
-
-combined_mask_pd = pd_df(combined_mask_df)
-
-#combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
-#combined_mask_df = pd_df_to_df(combined_mask)
-
-#combined_mask_df[!,:VALD_index] = convert.(Int,combined_mask_df[!,:VALD_index])
-
-telluric_indices = py"getTelluricIndices"(combined_mask_pd, true, Params[:overlap_cutoff], vel_slope_threshold=Params[:rejectTelluricSlope], RV_offset = 0.0, RV_range = 1e-4)
-
-combined_mask_df[!,:bool_filter_rejectTelluricSlope] = map(!,telluric_indices)
-
-combined_mask_df[!,:passed_all_bool_filters] = (combined_mask_df[:,:bool_filter_min_frac_converged]
-.&& combined_mask_df[:,:bool_filter_median_depth_between_5percent_and_1]
-.&& combined_mask_df[:,:bool_filter_std_velocity_width_quant]
-.&& combined_mask_df[:,:bool_filter_std_local_continuum_slope_quant]
-.&& combined_mask_df[:,:bool_filter_neg_bad_line]
-.&& combined_mask_df[:,:bool_filter_nan_bad_line]
-.&& combined_mask_df[:,:bool_filter_depth_cutoff]
-.&& combined_mask_df[:,:bool_filter_allowBlends]
-.&& combined_mask_df[:,:bool_filter_iron1Only]
-.&& combined_mask_df[:,:bool_filter_rejectTelluricSlope]
-.&& combined_mask_df[:,:bool_filter_badLineFilter])
-
-combined_mask_df_filtered = combined_mask_df[ combined_mask_df[!,:passed_all_bool_filters], :]
-
-mask = combined_mask_df_filtered
+combined_mask_df = pd_df_to_df(combined_mask)
 
 
-mask.weight = mask.depth
+combined_mask_df[!,:VALD_index] = convert.(Int,combined_mask_df[!,:VALD_index])
 
-#binned_masks = binMask(rename(mask,[:lambda,:weight]), nbin, binParam=:weight)
-binned_masks = binMask(mask, Params[:nbin], binParam=Params[:binParam])
-#rename!(binned_masks[1], [:lambda, :depth])
+Params[:overlap_cutoff] = 1e-5
+blend_indices, nOverlap = py"getBlends"(py"lineprops_G2", Params[:overlap_cutoff], Params[:allowBlends])
+combined_mask_df[!,:bool_filter_allowBlends] = blend_indices[combined_mask_df[!,:VALD_index]]
 
-for bin_n in 1:Params[:nbin]
-   saveStr = "RvLineList" * "_allowBlends="*string(Params[:allowBlends]) * "_overlapcutoff="*string(Params[:overlap_cutoff]) * "_rejectTelluricSlope="*string(Params[:rejectTelluricSlope]) * "_badLineFilter="*Params[:badLineFilter]* "_quant="*Params[:quant] * "_nbin="*string(Params[:nbin]) * "_DP="*string(Params[:depthPercentile]) * "_binParam="*string(Params[:binParam]) * "_n="*string(bin_n) * "_long_output="*string(Params[:long_output]) * "_VACUUM" * ".csv"
-   CSV.write(joinpath(Params[:output_dir],"clean_masks",saveStr),binned_masks[bin_n])
+overlap_cutoffs = 1e-6:1e-6:2e-5
+rejectTelluricSlopes = 1000.0:1000.0:50000.0
+
+#overlap_cutoff_depth_sums = zeros(length(overlap_cutoffs))
+rejectTelluricSlope_depth_sums = zeros(length(rejectTelluricSlopes))
+
+#for i in eachindex(overlap_cutoffs)
+for i in eachindex(rejectTelluricSlopes)
+
+   #Params[:overlap_cutoff] = 1e-5
+   #Params[:overlap_cutoff] = overlap_cutoffs[i]
+   #Params[:rejectTelluricSlope] = 10000.0
+   Params[:rejectTelluricSlope] = rejectTelluricSlopes[i]
+
+   telluric_indices = py"getTelluricIndices"(combined_mask, true, Params[:overlap_cutoff], vel_slope_threshold=Params[:rejectTelluricSlope], RV_offset = 0.0, RV_range = 1e-4)
+   combined_mask_df[!,:bool_filter_rejectTelluricSlope] = map(!,telluric_indices)
+
+   combined_mask_df[!,:passed_all_bool_filters] = (combined_mask_df[:,:bool_filter_min_frac_converged]
+   .&& combined_mask_df[:,:bool_filter_median_depth_between_5percent_and_1]
+   .&& combined_mask_df[:,:bool_filter_std_velocity_width_quant]
+   .&& combined_mask_df[:,:bool_filter_std_local_continuum_slope_quant]
+   .&& combined_mask_df[:,:bool_filter_neg_bad_line]
+   .&& combined_mask_df[:,:bool_filter_nan_bad_line]
+   .&& combined_mask_df[:,:bool_filter_depth_cutoff]
+   .&& combined_mask_df[:,:bool_filter_allowBlends]
+   .&& combined_mask_df[:,:bool_filter_iron1Only]
+   .&& combined_mask_df[:,:bool_filter_rejectTelluricSlope]
+   .&& combined_mask_df[:,:bool_filter_badLineFilter])
+
+   combined_mask_df_filtered = combined_mask_df[ combined_mask_df[!,:passed_all_bool_filters], :]
+
+   mask = combined_mask_df_filtered
+
+   sumOfDepths = sum(mask[!,:depth])
+
+   #overlap_cutoff_depth_sums[i] = sumOfDepths
+   rejectTelluricSlope_depth_sums[i] = sumOfDepths
+
 end
 
-#julia --project=RvSpectML/RvLineList RvSpectML/RvLineList/examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=1e-5 --rejectTelluricSlope=2000 --badLineFilter="none", --nbin=1 --output_dir="/home/awise/Desktop/neid_masks"
-
-#julia --project=RvSpectML/RvLineList RvSpectML/RvLineList/examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=2e-5 --rejectTelluricSlope=2000 --badLineFilter="none", --nbin=1 --output_dir="/home/awise/Desktop/neid_masks"
-
-#julia --project=RvSpectML/RvLineList RvSpectML/RvLineList/examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=1e-5 --rejectTelluricSlope=2000 --badLineFilter="ESPRESSOG2", --nbin=1 --output_dir="/home/awise/Desktop/neid_masks"
-
-#julia --project=RvSpectML/RvLineList RvSpectML/RvLineList/examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=2e-5 --rejectTelluricSlope=2000 --badLineFilter="ESPRESSOG2", --nbin=1 --output_dir="/home/awise/Desktop/neid_masks"
-
-
-"""
-
-mask1 = RvLineList.read_mask_air(joinpath(pkgdir(RvLineList),"inputs","ESPRESSO_masks","G2.espresso.mas"))
-mask2 = RvLineList.read_mask(joinpath("/home/awise/Desktop/neid_masks/clean_masks","RvLineList_allowBlends=0_overlapcutoff=2.0e-5_rejectTelluricSlope=2000.0_badLineFilter=none,_quant=90_nbin=1_DP=true_binParam=depth_n=1_long_output=false_VACUUM.csv"))
-
-using Plots, JLD2, FileIO
-
-neidSolar = load("/home/awise/data/neid/solar/2021/02/21/daily_ccfs_1.jld2")
-lam = neidSolar["mean_lambda"]
-flux = neidSolar["mean_clean_flux_continuum_normalized"]
-
-rectangle(w, h, x, y) = Shape(x .+ [0,w,w,0], y .+ [0,0,h,h])
-plot()
-for i in 1:122
-   plot!(lam[:,i],flux[:,i], linecolor="yellow", legend=false)
+ii = 0:9
+fracs = zeros(length(ii))
+for i in eachindex(ii)
+   fracs[i] = 1.0 * 0.9^ii[i]
 end
-xlims!(3500,10000)
-ylims!(-0.1,1.1)
-xlabel!("Wavelength (Angstroms)")
-ylabel!("Normalized Flux")
 
-for i in 1:(size(mask1,1)-1)
-   plot!(rectangle(mask1[i,:lambda]*1e-5,mask1[i,:depth],mask1[i,:lambda],1-mask1[i,:depth]), opacity=.5, linecolor="red",fillcolor="red")
+overlap_cutoffs_to_use = zeros(length(fracs))
+rejectTelluricSlopes_to_use = zeros(length(fracs))
+
+starting_overlap_cutoff = overlap_cutoff_depth_sums[1]
+starting_rejectTelluircSlope = 590.0
+
+for i in eachindex(fracs)
+   overlap_cutoffs_to_use[i] = overlap_cutoffs[findmin( abs.(overlap_cutoff_depth_sums .- (starting_overlap_cutoff * fracs[i])) )[2]]
+   rejectTelluricSlopes_to_use[i] = rejectTelluricSlopes[findmin( abs.(rejectTelluricSlope_depth_sums .- (starting_rejectTelluircSlope * fracs[i])) )[2]]
 end
-i=size(mask1,1)
-display(plot!(rectangle(mask1[i,:lambda]*1e-5,mask1[i,:depth],mask1[i,:lambda],1-mask1[i,:depth]), opacity=.5, linecolor="red",fillcolor="red"))
 
-
-for i in 1:(size(mask2,1)-1)
-   plot!(rectangle(mask2[i,:lambda]*1e-5,mask2[i,:depth],mask2[i,:lambda],1-mask2[i,:depth]), opacity=.5, linecolor="blue",fillcolor="blue")
-end
-i=size(mask2,1)
-display(plot!(rectangle(mask2[i,:lambda]*1e-5,mask2[i,:depth],mask2[i,:lambda],1-mask2[i,:depth]), opacity=.5, linecolor="blue",fillcolor="blue"))
-
-savefig("/home/awise/Desktop/masks.png")
-
-xlims!(5137,5145)
-savefig("/home/awise/Desktop/masks_zoomed1.png")
-
-xlims!(8600,8800)
-savefig("/home/awise/Desktop/masks_zoomed2.png")
-
-"""
+print(overlap_cutoffs_to_use)
+print(rejectTelluricSlopes_to_use)

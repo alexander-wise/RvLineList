@@ -1,8 +1,6 @@
 # empirical_line_lists.jl
 # generate empirical mask, based on Eric Ford's RvSpectML.jl/examples/expres_analyze_line_by_line.jl, adapted to NEID data by Alex Wise
 
-#TODO: Make sure barycentric shifting is working in template making (i thought its only 20 m/s but its actualy closer to 1 km/s)
-
 """ Check that params module includes required params for a function """
 function assert_params_exist(params::Dict{Symbol,Any}, params_to_check::Vector{Symbol})
    for p in params_to_check
@@ -326,12 +324,15 @@ Outputs:
 """
 function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=params[:output_dir], pipeline_plan::PipelinePlan = PipelinePlan(), verbose::Bool=true)
 
-   assert_params_exist(params, [:output_dir, :norm_type, :inst, :daily_ccfs_base_path, :daily_manifests_base_path, :pipeline_output_summary_path, :daily_ccf_fn, :daily_manifest_fn, :orders_to_use, :fits_target_str, :line_width_50, :quant, :discard_neg_nan])
+   """
+   params = Params
+   output_dir = params[:output_dir]
+   pipeline_plan = RvLineList.PipelinePlan()
+   verbose = true
+   """
 
-   #isSolarData=false
-   #output_dir = "outputs/masks/"
-   #pipeline_plan = PipelinePlan()
-   #verbose = true
+   assert_params_exist(params, [:output_dir, :norm_type, :inst, :daily_ccfs_base_path, :daily_manifests_base_path, :pipeline_output_summary_path, :daily_ccf_fn, :daily_manifest_fn, :orders_to_use, :fits_target_str, :line_width_50, :min_frac_converged, :quant])
+
    reset_all_needs!(pipeline_plan) #TODO: revise module PipelinePlan or my usage of the module so this line is not needed.
 
    #if verbose println("# Reading in customized parameters from param.jl.")  end
@@ -385,10 +386,11 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       if verbose println("# Removing and tracking negative and nan values from template.") end
       #add neg/nan wavelength intervals from template to the original DataFrames
       nan_wavelength_intervals, neg_wavelength_intervals = remove_and_track_nans_negatives!(clt, nan_wavelength_intervals=nan_wavelength_intervals, neg_wavelength_intervals=neg_wavelength_intervals, use_inst_bad_col_ranges=false)
-
+      """ #setup code for measuring RVs using template matching technique -- currently not used
       cl_derivs = ChunkList(map(grid->ChunkOfSpectrum(spectral_orders_matrix.λ, deriv, deriv2, grid), spectral_orders_matrix.chunk_map), ones(Int64,length(spectral_orders_matrix.chunk_map)))
       template_linear_interp = map(chid -> Interpolations.LinearInterpolation(cl[chid].λ,cl[chid].flux,extrapolation_bc=Flat()), 1:length(cl))
       template_deriv_linear_interp = map(chid -> Interpolations.LinearInterpolation(cl_derivs[chid].λ,cl_derivs[chid].flux,extrapolation_bc=Flat()), 1:length(cl_derivs))
+      """
       # We're done with the spectral_orders_matrix, so we can release the memory now
       spectral_orders_matrix = nothing
       GC.gc()
@@ -398,69 +400,113 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       @time lines_in_template = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=params[:line_width_50],min_deriv2=0.5, use_logλ=true, use_logflux=false), verbose=false)  # TODO: Automate threshold for finding a line
       match_bad_wavelength_intervals_with_lines!(lines_in_template, neg_wavelength_intervals, cl, col_name = :neg_bad_line)
       match_bad_wavelength_intervals_with_lines!(lines_in_template, nan_wavelength_intervals, cl, col_name = :nan_bad_line)
-      @assert (eltype(lines_in_template[!, :neg_bad_line]) == Bool) && (eltype(lines_in_template[!, :nan_bad_line]) == Bool) #make sure the next statement is comparing Booleans
+      @assert (eltype(lines_in_template[!, :neg_bad_line]) == Bool) && (eltype(lines_in_template[!, :nan_bad_line]) == Bool) #make sure these are Booleans so the next line is valid
       good_line_idx = findall(.~(lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
+      bad_line_idx = findall((lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
+      if verbose println("# Found " * string(nrow(lines_in_template) - length(good_line_idx)) * " lines contaminated by nan or negative values.") end
 
-      if params[:discard_neg_nan]
-         if verbose println("# Removing " * string(nrow(lines_in_template) - length(good_line_idx)) * " lines due to matching nan or negative values.") end
-         lines_to_fit = lines_in_template[good_line_idx,:]
-      else
-         lines_to_fit = lines_in_template
-      end
+      lines_to_fit = lines_in_template[good_line_idx,:]
 
-      if verbose println("# Fitting above lines in all spectra.")  end
+      if verbose println("# Fitting uncontaminated lines in all spectra.")  end
       @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_to_fit )
-      @time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_to_fit )
+      #@time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_in_template )
    
       if save_data(pipeline_plan,:fit_lines)
-         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_lines.csv"), lines_in_template )
-         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_good_lines.csv"), lines_to_fit )
+         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_accepted_lines.csv"), lines_to_fit )
+         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_rejected_lines.csv"), lines_in_template[bad_line_idx,:] )
          CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_fits.csv"), fits_to_lines )
-         CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_RVs.csv"), line_RVs )
+         #CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_line_RVs.csv"), line_RVs )
       end
    
       dont_need_to!(pipeline_plan,:fit_lines);
    end
    
-   select_line_fits_with_good_depth_width_slope(params, fits_to_lines, parse(Float64,params[:quant]) / 100, verbose=verbose, output_dir=output_dir, fits_target_str=params[:fits_target_str])
+   #select lines with good frac converged, median depth, std velocity width, and local continuum slope
+   fit_distrib_df = select_line_fits_with_good_depth_width_slope(params, fits_to_lines, parse(Float64,params[:quant]) / 100, verbose=verbose, output_dir=output_dir, fits_target_str=params[:fits_target_str])
+
+   #create a new Dataframe with full line_in_template size to track neg/nan lines
+   df_total = similar(fit_distrib_df,size(lines_in_template,1))
+   df_total[good_line_idx,:] = fit_distrib_df
+   #fix the line_ids since the fits didn't know about the neg/nan lines
+   df_total[good_line_idx,:line_id] = good_line_idx
+   df_total[bad_line_idx,:line_id] = bad_line_idx
+   #add neg/nan columns to the Dataframe
+   df_total[!,:bool_filter_neg_bad_line] = .~lines_in_template[:, :neg_bad_line]
+   df_total[!,:bool_filter_nan_bad_line] = .~lines_in_template[:, :nan_bad_line]
+
+   return df_total
 
 end #end function generateEmpiricalMask()
 
 
 
-#author: Eric Ford
+#original author: Eric Ford
 #adapted from: RvSpectML.jl/examples/expres_analyze_line_by_line.jl
 function select_line_fits_with_good_depth_width_slope(params::Dict{Symbol,Any}, line_fits_df::DataFrame, quantile_threshold::Real; verbose::Bool = false, output_dir::String = "", fits_target_str::String = "" )
 
-   assert_params_exist(params, [:inst])
+   """
+   params = params
+   line_fits_df = fits_to_lines
+   quantile_threshold = parse(Float64,params[:quant]) / 100
+   verbose=verbose
+   output_dir=output_dir
+   fits_target_str=params[:fits_target_str]
+   """
+
+   assert_params_exist(params, [:inst, :min_frac_converged])
+
+   min_frac_converged = parse(Float64,params[:min_frac_converged]) / 100
 
    fit_distrib = line_fits_df |> @groupby(_.line_id) |>
             @map( { median_a=median(_.fit_a), median_b=median(_.fit_b), median_depth=median(_.fit_depth), median_σ²=median(_.fit_σ²), median_λc=median(_.fit_λc),
                    std_a=std(_.fit_a), std_b=std(_.fit_b), std_depth=std(_.fit_depth), std_σ²=std(_.fit_σ²), std_λc=std(_.fit_λc),
-                   line_id=first(_.line_id),  frac_converged=mean(_.fit_converged)  } ) |>
-            @filter(_.frac_converged == 1.0 ) |> DataFrame
+                   line_id=first(_.line_id),  frac_converged=mean(_.fit_converged)  } ) |> DataFrame
 
-   std_depth_treshold = quantile(fit_distrib.std_depth,quantile_threshold)
-   median_σ_width_treshold = 2000 # quantile(sqrt.(fit_distrib.median_σ²)./fit_distrib.median_λc.*RvSpectML.speed_of_light_mps,1-quantile_threshold)
-   std_σ_width_treshold = quantile(sqrt.(fit_distrib.std_σ²)./fit_distrib.median_λc.*RvSpectML.speed_of_light_mps,quantile_threshold)
-   std_b_treshold = quantile(fit_distrib.std_b,quantile_threshold)
-   std_a_treshold = quantile(fit_distrib.std_a,quantile_threshold)
-   good_lines_alt = fit_distrib |>
-      @filter( 0.05 <= _.median_depth <= 1.0 ) |>
-      #@filter( sqrt.(_.median_σ²)./_.median_λc.*RvSpectML.speed_of_light_mps >= median_σ_width_treshold ) |>
-      @filter( sqrt.(_.std_σ²)./_.median_λc.*RvSpectML.speed_of_light_mps <= std_σ_width_treshold ) |>
-      @filter( _.std_b < std_b_treshold) |>
+   #apply min_frac_converged filter before calculating quantile thresholds
+   fit_distrib[!,:bool_filter_min_frac_converged] = fit_distrib.frac_converged .>= min_frac_converged
+   converged_idx = findall(fit_distrib[:,:bool_filter_min_frac_converged])
+   not_converged_idx = findall(.~(fit_distrib[:,:bool_filter_min_frac_converged]))
+   filtered_fit_distrib = fit_distrib[converged_idx,:]   
 
-      DataFrame
+   #calculate quantile thresholds
+   #std_depth_threshold = quantile(filtered_fit_distrib.std_depth,quantile_threshold)
+   #median_σ_width_threshold = 2000 # quantile(sqrt.(filtered_fit_distrib.median_σ²)./filtered_fit_distrib.median_λc.*RvSpectML.speed_of_light_mps,1-quantile_threshold)
+   std_σ_width_threshold = quantile(sqrt.(filtered_fit_distrib.std_σ²)./filtered_fit_distrib.median_λc.*RvSpectML.speed_of_light_mps,quantile_threshold)
+   std_b_threshold = quantile(filtered_fit_distrib.std_b,quantile_threshold)
+   #std_a_threshold = quantile(filtered_fit_distrib.std_a,quantile_threshold)
+
+   #compute remaining boolean filters
+   fit_distrib[!,:bool_filter_median_depth_between_5percent_and_1] = 0.05 .<= fit_distrib.median_depth .<= 1.0
+   fit_distrib[!,:bool_filter_std_velocity_width_quant] = sqrt.(fit_distrib.std_σ²)./fit_distrib.median_λc.*RvSpectML.speed_of_light_mps .<= std_σ_width_threshold 
+   fit_distrib[!,:bool_filter_std_local_continuum_slope_quant] = fit_distrib.std_b .<= std_b_threshold
+
+   #assign missing value to not_converged fits
+   allowmissing!(fit_distrib)
+   fit_distrib[not_converged_idx,:bool_filter_median_depth_between_5percent_and_1] .= missing
+   fit_distrib[not_converged_idx,:bool_filter_std_velocity_width_quant] .= missing
+   fit_distrib[not_converged_idx,:bool_filter_std_local_continuum_slope_quant] .= missing
+
+   #good_lines_alt = fit_distrib |>
+   #   @filter( 0.05 <= _.median_depth <= 1.0 ) |>
+   #   #@filter( sqrt.(_.median_σ²)./_.median_λc.*RvSpectML.speed_of_light_mps >= median_σ_width_threshold ) |>
+   #   @filter( sqrt.(_.std_σ²)./_.median_λc.*RvSpectML.speed_of_light_mps <= std_σ_width_threshold ) |>
+   #   @filter( _.std_b < std_b_threshold) |>
+   #   DataFrame
+   
+   good_lines_bool = fit_distrib[:,:bool_filter_min_frac_converged] .&& fit_distrib[:,:bool_filter_median_depth_between_5percent_and_1] .&& fit_distrib[:,:bool_filter_std_velocity_width_quant] .&& fit_distrib[:,:bool_filter_std_local_continuum_slope_quant]
+
+   good_lines_alt = fit_distrib[good_lines_bool,:]
+
    if verbose
       println("# Found ", size(good_lines_alt,1), " good lines (std_depth_width_slope), rejected ", size(fit_distrib,1)-size(good_lines_alt,1), " lines.")
    end
    if length(output_dir) > 0
-      val_str = Printf.@sprintf("%1.2f",quantile_threshold)
+      quant_str = Printf.@sprintf("%1.2f",quantile_threshold)
+      frac_str = Printf.@sprintf("%1.2f",min_frac_converged)
       airVacString = get_airVacString(params[:inst])
-      CSV.write(joinpath(output_dir,fits_target_str * "_good_lines_fit_quant=" * val_str * airVacString * ".csv"), good_lines_alt )
+      CSV.write(joinpath(output_dir,fits_target_str * "_all_lines_fit_distrib_quant=" * quant_str * "min_frac_converged=" * frac_str * airVacString * ".csv"), fit_distrib )
    end
-   return good_lines_alt
+   return fit_distrib
 end
 
 
