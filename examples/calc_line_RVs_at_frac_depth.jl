@@ -215,10 +215,6 @@ deep_lines = findall(mask.depth .> 0.7)
 middle_lines = findall(0.5 .< mask.depth .<= 0.7)
 shallow_lines = findall(mask.depth .<= 0.5)
 
-using Plots
-
-#scatter(times[deep_lines,:,1]',line_RVs[deep_lines,:,8]')
-#histogram(line_RVs[deep_lines,:,8]')
 
 line_RVs_nonan = deepcopy(line_RVs)
 line_RVs_nonan[findall(isnan.(line_RVs_nonan))] .= 1e5
@@ -227,6 +223,12 @@ line_RVs_nonan[findall(isnan.(line_RVs_nonan))] .= 1e5
 stds_deep = [RvLineList.median(RvLineList.std(line_RVs_nonan[deep_lines,:,i],dims=2)) for i in 1:length(frac_depths)]
 stds_middle = [RvLineList.median(RvLineList.std(line_RVs_nonan[middle_lines,:,i],dims=2)) for i in 1:length(frac_depths)]
 stds_shallow = [RvLineList.median(RvLineList.std(line_RVs_nonan[shallow_lines,:,i],dims=2)) for i in 1:length(frac_depths)]
+
+
+using Plots
+
+#scatter(times[deep_lines,:,1]',line_RVs[deep_lines,:,8]')
+#histogram(line_RVs[deep_lines,:,8]')
 
 scatter(frac_depths,stds_deep ./ RvLineList.median(stds_deep))
 scatter!(frac_depths,stds_middle ./ RvLineList.median(stds_middle))
