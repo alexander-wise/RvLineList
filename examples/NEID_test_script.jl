@@ -177,9 +177,10 @@ combined_mask_pd = pd_df(combined_mask_df)
 
 #combined_mask_df[!,:VALD_index] = convert.(Int,combined_mask_df[!,:VALD_index])
 
-telluric_indices = py"getTelluricIndices"(combined_mask_pd, true, Params[:overlap_cutoff], vel_slope_threshold=Params[:rejectTelluricSlope], RV_offset = 0.0, RV_range = 1e-4)
+#the following 2 lines are commented out since telluric rejection was added to generateEmpiricalMask() so they are no longer needed
+#telluric_indices = py"getTelluricIndices"(combined_mask_pd, true, Params[:overlap_cutoff], vel_slope_threshold=Params[:rejectTelluricSlope], RV_offset = 0.0, RV_range = 1e-4)
+#combined_mask_df[!,:bool_filter_rejectTelluricSlope] = map(!,telluric_indices)
 
-combined_mask_df[!,:bool_filter_rejectTelluricSlope] = map(!,telluric_indices)
 
 combined_mask_df[!,:passed_all_bool_filters] = (combined_mask_df[:,:bool_filter_min_frac_converged]
 .&& combined_mask_df[:,:bool_filter_median_depth_between_5percent_and_1]
