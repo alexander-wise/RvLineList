@@ -21,6 +21,9 @@ s = ArgParseSettings()
    "--overlap_cutoff"
       help = "distance between lines required for them to be categorized as a blend, expressed as a fraction of the speed of light"
       arg_type = Float64
+   "--depth_cutoff"
+      help = "line depth, as a fraction of continuum, to be considered negligible"
+      arg_type = Float64
    "--rejectTelluricSlope"
       help = "derivative of spectrum required for telluric line rejection, in units of normalized depth per fraction of speed of light - a value of 0 turns off telluric rejection, 2000-10000 is recommended range in values"
       arg_type = Float64
@@ -52,6 +55,11 @@ end
 if parsed_args["overlap_cutoff"] !== nothing
    println("Found command-line arg overlap_cutoff. Overwriting param file definition of this arg.")
    Params[:overlap_cutoff] = parsed_args["overlap_cutoff"]
+end
+
+if parsed_args["depth_cutoff"] !== nothing
+   println("Found command-line arg depth_cutoff. Overwriting param file definition of this arg.")
+   Params[:depth_cutoff] = parsed_args["depth_cutoff"]
 end
 
 if parsed_args["rejectTelluricSlope"] !== nothing
@@ -168,7 +176,11 @@ end
 VALD_mask_long_df = pd_df_to_df(VALD_mask_long)
 VALD_mask_long_df[!,:species] .= convert.(String,VALD_mask_long_df[!,:species])
 
-combined_mask_df = mask_intersection(empirical_mask, VALD_mask_long_df, threshold=500.0)
+#filter VALD mask by depth before merging with empirical mask to make sure the merging process is not affected by insignificant depth lines
+VALD_mask_depth_filtered_df = VALD_mask_long_df[ VALD_mask_long_df[!,:bool_filter_depth_cutoff], :]
+
+#merge VALD and empirical masks
+combined_mask_df = mask_intersection(empirical_mask, VALD_mask_depth_filtered_df, threshold=500.0)
 
 combined_mask_pd = pd_df(combined_mask_df)
 
@@ -206,7 +218,7 @@ binned_masks = binMask(mask, Params[:nbin], binParam=Params[:binParam])
 #rename!(binned_masks[1], [:lambda, :depth])
 
 for bin_n in 1:Params[:nbin]
-   saveStr = "RvLineList" * "_allowBlends="*string(Params[:allowBlends]) * "_overlapcutoff="*string(Params[:overlap_cutoff]) * "_rejectTelluricSlope="*string(Params[:rejectTelluricSlope]) * "_badLineFilter="*Params[:badLineFilter]* "_quant="*Params[:quant] * "_nbin="*string(Params[:nbin]) * "_DP="*string(Params[:depthPercentile]) * "_binParam="*string(Params[:binParam]) * "_n="*string(bin_n) * "_long_output="*string(Params[:long_output]) * "_VACUUM" * ".csv"
+   saveStr = "RvLineList" * "_allowBlends="*string(Params[:allowBlends]) * "_overlapCutoff="*string(Params[:overlap_cutoff]) * "_depthCutoff="*string(Params[:depth_cutoff]) * "_rejectTelluricSlope="*string(Params[:rejectTelluricSlope]) * "_badLineFilter="*Params[:badLineFilter]* "_quant="*Params[:quant] * "_nbin="*string(Params[:nbin]) * "_DP="*string(Params[:depthPercentile]) * "_binParam="*string(Params[:binParam]) * "_n="*string(bin_n) * "_long_output="*string(Params[:long_output]) * "_VACUUM" * ".csv"
    CSV.write(joinpath(Params[:output_dir],"clean_masks",saveStr),binned_masks[bin_n])
 end
 
