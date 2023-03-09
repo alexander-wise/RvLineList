@@ -41,6 +41,10 @@ using IntervalArithmetic #objects used: .. ∪ ∩
 using PyCall #makes it possible to call python functions from make_VALD_line_list.py in a julia environment
 import Pandas.DataFrame as pd_df #used to convert julia DataFrame to python pandas.DataFrame
 
+using NPZ #handles .py files in julia
+using DelimitedFiles #allows reading of delimited files similarly to the python function np.genfromtxt
+
+
 #mask manipulation
 include("masks.jl")
 export read_mask_air, read_mask_vacuum, binMask

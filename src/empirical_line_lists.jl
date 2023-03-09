@@ -331,7 +331,7 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
    verbose = true
    """
 
-   assert_params_exist(params, [:output_dir, :norm_type, :inst, :daily_ccfs_base_path, :daily_manifests_base_path, :pipeline_output_summary_path, :daily_ccf_fn, :daily_manifest_fn, :orders_to_use, :fits_target_str, :line_width_50, :min_frac_converged, :quant])
+   assert_params_exist(params, [:output_dir, :norm_type, :inst, :daily_ccfs_base_path, :daily_manifests_base_path, :pipeline_output_summary_path, :daily_ccf_fn, :daily_manifest_fn, :orders_to_use, :fits_target_str, :line_width_50, :overlap_cutoff, :min_frac_converged, :quant])
 
    reset_all_needs!(pipeline_plan) #TODO: revise module PipelinePlan or my usage of the module so this line is not needed.
 
@@ -342,6 +342,13 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
    if params[:norm_type] != :continuum
       println("Warning: norm_type=:continuum is required by generateEmpiricalMask() but found norm_type=:", String(params[:norm_type]))
    end
+
+   #declare whether wavelengths in spectra to be loaded are air or vacuum
+   wavelengths_are_vacuum = true
+   if (params[:inst] == :harps) | (params[:inst] == :harpsn)
+      wavelengths_are_vacuum = false
+   end
+
 
    if need_to(pipeline_plan,:read_spectra)
       if params[:inst] == :expres
@@ -400,10 +407,14 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       @time lines_in_template = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=params[:line_width_50],min_deriv2=0.5, use_logλ=true, use_logflux=false), verbose=false)  # TODO: Automate threshold for finding a line
       match_bad_wavelength_intervals_with_lines!(lines_in_template, neg_wavelength_intervals, cl, col_name = :neg_bad_line)
       match_bad_wavelength_intervals_with_lines!(lines_in_template, nan_wavelength_intervals, cl, col_name = :nan_bad_line)
-      @assert (eltype(lines_in_template[!, :neg_bad_line]) == Bool) && (eltype(lines_in_template[!, :nan_bad_line]) == Bool) #make sure these are Booleans so the next line is valid
-      good_line_idx = findall(.~(lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
-      bad_line_idx = findall((lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line]))
-      if verbose println("# Found " * string(nrow(lines_in_template) - length(good_line_idx)) * " lines contaminated by nan or negative values.") end
+
+      too_close_to_telluric = getTelluricIndices(lines_in_template, wavelengths_are_vacuum, params[:overlap_cutoff], vel_slope_threshold = params[:rejectTelluricSlope], RV_offset = 0.0, RV_range = 1e-4)
+      lines_in_template[!, :rejectTelluricSlope] = too_close_to_telluric
+
+      @assert (eltype(lines_in_template[!, :neg_bad_line]) == Bool) && (eltype(lines_in_template[!, :nan_bad_line]) == Bool) && (eltype(too_close_to_telluric) == Bool) #make sure these are Booleans so the next line is valid
+      good_line_idx = findall(.~(lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line] .| too_close_to_telluric))
+      bad_line_idx = findall((lines_in_template[:, :neg_bad_line] .| lines_in_template[:, :nan_bad_line] .| too_close_to_telluric))
+      if verbose println("# Found " * string(nrow(lines_in_template) - length(good_line_idx)) * " lines contaminated by nan or negative values or tellurics.") end
 
       lines_to_fit = lines_in_template[good_line_idx,:]
 
@@ -430,9 +441,10 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
    #fix the line_ids since the fits didn't know about the neg/nan lines
    df_total[good_line_idx,:line_id] = good_line_idx
    df_total[bad_line_idx,:line_id] = bad_line_idx
-   #add neg/nan columns to the Dataframe
+   #add neg/nan/telluric columns to the Dataframe
    df_total[!,:bool_filter_neg_bad_line] = .~lines_in_template[:, :neg_bad_line]
    df_total[!,:bool_filter_nan_bad_line] = .~lines_in_template[:, :nan_bad_line]
+   df_total[!,:bool_filter_rejectTelluricSlope] = .~lines_in_template[:, :rejectTelluricSlope]
 
    return df_total
 
@@ -651,6 +663,54 @@ function fit_line_RV(flux::AbstractArray{T1,1}, var::AbstractArray{T2,1}, templa
 
    return z
  end
+
+
+
+
+
+#this function was translated by ChatGPT from the function of the same name in make_VALD_line_list.py, and then edited to resolve errors
+function getTelluricIndices(mask, maskWavelengthsAreVacuum, overlap_cutoff; vel_slope_threshold=2000.0, RV_offset = 0.0, RV_range = 1e-4)
+   # telluric_RV_threshold is the Earth's barycentric velocity as a fraction of speed of the light - to be added to overlap_cutoff for stars other than the sun, can be set to 0 for the sun
+   fname = "inputs/Telluric_Rejection/telluric_waves_$(vel_slope_threshold).npy"
+   if isfile(fname)
+      telluric_waves = npzread(fname)*10.0 #the *10.0 converts from nm to Angstroms
+   else
+      #get telluric wavelengths using telluric spectrum slope threshold criteria
+      #vel_slope_threshold=2000.0
+      X = readdlm("inputs/Telluric_Rejection/tapas_000002.ipac", skipstart=26)
+      dD = X[2:end,2] - X[1:end-1,2] #change in depth between adjacent pixels
+      dV = (X[2:end,1] - X[1:end-1,1]) ./ X[1:end-1,1] #change in velocity between adjacent pixels
+      dD_dV = dD ./ dV #change in depth with respect to velocity
+      telluric_indices = findall((abs.(dD_dV) .> vel_slope_threshold) .| (X[2:end,2] .< 0.1)) #where slope is significant or telluric line is saturated
+      
+      npzwrite(fname, X[telluric_indices,1])
+      telluric_waves = npzread(fname)*10.0 #the *10.0 converts from nm to Angstroms
+   end
+   #telluric_waves are read in as air wavelengths, so we make sure they are both air or both vacuum
+   if maskWavelengthsAreVacuum
+      telluric_waves = airVacuumConversion(telluric_waves, toAir=false)
+   end
+   #shift to RV_offset
+   telluric_waves = telluric_waves * (1+RV_offset/C_m_s)
+   #compare mask line centers with telluric lines
+   maskCenters = mask[!,"fit_λc"]
+   too_close_to_telluric = falses(nrow(mask))
+   for i in 1:nrow(mask)
+      if (minimum(abs.(maskCenters[i] .- telluric_waves)) ./ maskCenters[i]) < (overlap_cutoff+RV_range)
+            too_close_to_telluric[i] = true
+      end
+   end
+   return too_close_to_telluric
+end
+
+
+
+
+
+
+
+
+
 
 """
 

@@ -185,3 +185,14 @@ function mask_intersection(mask1::DataFrame, mask2::DataFrame; default_data::Str
    return sort(sub_mask_out,[:lambda])
 end
 
+
+#this function was translated by ChatGPT from the function of the same name in make_VALD_line_list.py, and then edited to resolve errors
+function airVacuumConversion(w; toAir=true)
+   ss0 = 10^4 ./ w
+   n0 = 1.0 .+ 0.0000834254 .+ 0.02406147 ./ (130.0 .- ss0.^2) .+ 0.00015998 ./ (38.9 .- ss0.^2)
+   if toAir
+       return w ./ n0
+   else
+       return w .* n0
+   end
+end
