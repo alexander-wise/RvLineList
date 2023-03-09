@@ -27,7 +27,8 @@ lineprops_K1 = pd.read_table(os.path.join(VALD_dir, 'VALD-AlphaCenB.txt'),delimi
 
 #load solar VALD data:
 #lineprops_G2 = pd.read_table(os.path.join(VALD_dir, 'VALD-Solar.txt'),delimiter=',',skiprows=3, skipfooter=106,usecols=(0,1,2,4,9), names=("species", "lambda", "excitation_energy", "oscillator_strength", "depth"), engine="python")
-lineprops_G2 = pd.read_table(os.path.join(VALD_dir, 'VALD-Solar-0.01.txt'),delimiter=',',skiprows=3, skipfooter=109,usecols=(0,1,2,4,9), names=("species", "lambda", "excitation_energy", "oscillator_strength", "depth"), engine="python")
+#lineprops_G2 = pd.read_table(os.path.join(VALD_dir, 'VALD-Solar-0.01.txt'),delimiter=',',skiprows=3, skipfooter=109,usecols=(0,1,2,4,9), names=("species", "lambda", "excitation_energy", "oscillator_strength", "depth"), engine="python")
+lineprops_G2 = pd.read_table(os.path.join(VALD_dir, 'VALD-Solar-0.001-merged.txt'),delimiter=',',skiprows=3, skipfooter=108,usecols=(0,1,2,4,9), names=("species", "lambda", "excitation_energy", "oscillator_strength", "depth"), engine="python")
 
 #load VALD data for HD101501:
 lineprops_G8 = pd.read_table(os.path.join(VALD_dir, 'VALD-HD101501.txt'),delimiter=',',skiprows=3, skipfooter=109,usecols=(0,1,2,4,9), names=("species", "lambda", "excitation_energy", "oscillator_strength", "depth"), engine="python")
