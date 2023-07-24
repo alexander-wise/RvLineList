@@ -163,6 +163,12 @@ function make_VALD_data_blend_factors_file(VALD_data::DataFrame, T_form_data::Da
 end
 
 
+make_VALD_data_blend_factors_file(VALD_data, T_form_data)
+
+
+
+###ABOVE THIS COMMENT: MAKE BLEND FACTORS FILE FOR VALD LINE LIST
+###BELOW THIS COMMENT: EXPLORE BLEND FACTORS RESULTS
 
 
 
