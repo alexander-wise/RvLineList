@@ -422,12 +422,12 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       if verbose println("# Fitting uncontaminated lines in all spectra.")  end
       @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_to_fit )
       #get original chunk_ids / pixels to output with fits_to_lines
-      fits_to_lines[!,:original_chunk_id] = zeros(Int,size(fits_to_lines)[1])
-      fits_to_lines[!,:original_pixels] = fill(1:1,size(fits_to_lines)[1])
+      fits_to_lines[!,:fits_chunk_id] = zeros(Int,size(fits_to_lines)[1])
+      fits_to_lines[!,:fits_pixels] = fill(1:1,size(fits_to_lines)[1])
       for i in 1:size(fits_to_lines)[1]
          original_chunk_id, original_pixels = get_original_pixels(order_list_timeseries, fits_to_lines[i,:obs_idx], fits_to_lines[i,:chunk_id], fits_to_lines[i,:pixels])
-         fits_to_lines[i,:original_chunk_id] = original_chunk_id
-         fits_to_lines[i,:original_pixels] = original_pixels
+         fits_to_lines[i,:fits_chunk_id] = original_chunk_id
+         fits_to_lines[i,:fits_pixels] = original_pixels
       end
          #@time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_in_template )
    
