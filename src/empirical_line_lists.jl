@@ -454,6 +454,13 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
    df_total[!,:bool_filter_nan_bad_line] = .~lines_in_template[:, :nan_bad_line]
    df_total[!,:bool_filter_rejectTelluricSlope] = .~lines_in_template[:, :rejectTelluricSlope]
 
+   #calculate mean template variance for each line
+   df_total[!,:mean_template_var] = zeros(size(df_total)[1])
+   for i in 1:size(df_total)[1]
+      df_total[i,:mean_template_var] = mean(cl[lines_in_template[i,:chunk_id]].var[lines_in_template[i,:pixels]])
+   end
+
+   
    return df_total
 
 end #end function generateEmpiricalMask()
