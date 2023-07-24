@@ -31,15 +31,15 @@ path_params = Dict(
 #:pipeline_output_summary_path => "/home/awise/data/neid/solar/summary_1.csv",
 
 :pipeline_output_summary_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/summary_espressoG2_norm=cont&mask=3.csv",
-#:pipeline_output_summary_path => "/home/awise/data/neid/solar/summary_espressoG2_norm=blaze&mask=1.csv",
+:pipeline_output_summary_path => "/home/awise/data/neid/solar/summary_espressoG2_norm=blaze&mask=1.csv",
 
 :daily_ccfs_base_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/",
-#:daily_ccfs_base_path => "/home/awise/data/neid/solar/",
+:daily_ccfs_base_path => "/home/awise/data/neid/solar/",
 #:daily_ccf_fn => "daily_ccfs_1.jld2",
 :daily_ccf_fn => "daily_ccfs_espressoG2_norm=cont&mask=3.jld2",
 
 :daily_manifests_base_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/manifest",
-#:daily_manifests_base_path => "/home/awise/data/neid/solar/",
+:daily_manifests_base_path => "/home/awise/data/neid/solar/",
 :daily_manifest_fn => "manifest.csv",
 
 :output_dir => joinpath(pwd(),"outputs"),
@@ -74,8 +74,8 @@ linelist_params = Dict(
 
 # lineprops = lineprops_101501 #which VALD line list to use in mask creation - not works in param file yet because mask names do not use this param as they should
 #maskWavelengths = string("Reiners",target) #keyword for mask wavelengths - should be e.g. Reiners or Reiners101501
-:allowBlends => 0, #number of blends allowed with each line, e.g. 0 for single lines only, 1 for doublets only, [0,1] for singlets and doublets
-:overlap_cutoff => 2.0e-5, #distance between lines required for them to be categorized as a blend, expressed as a fraction of the speed of light
+:allowBlends => [0,1,2,3,4,5,6,7,8], #number of blends allowed with each line, e.g. 0 for single lines only, 1 for doublets only, [0,1] for singlets and doublets
+:overlap_cutoff => 3.0e-5, #distance between lines required for them to be categorized as a blend, expressed as a fraction of the speed of light
 :depth_cutoff => 0.01,
 :iron1Only => "all", # which species to use - options are "Fe1", "nonFe1", "all"
 :badLineFilter => "none", #which mask to use to filter out bad line - only lines within ~ 3 km/s of one of these mask lines will be kept
@@ -88,7 +88,7 @@ linelist_params = Dict(
 
 # Empirical mask params
 #:discard_neg_nan => true, #whether or not lines affected by negative / nan values should be discarded #commented out as this now happens by default
-:quant => "90", #quantile for stability of fit params for empirical masks, expressed as a string out of 100
+:quant => "100", #quantile for stability of fit params for empirical masks, expressed as a string out of 100
 :min_frac_converged => "100", #minimum fraction of the line fits that converged in the dataset for the empirical line to be used, expressed as a string out of 100
 :line_width_50 => 7392.0, #NEID solar line width for ESPRESSO G2 mask, mask_scale_factor = 2.0, other ccf params default values
 :matching_threshold => 500.0 #distance (in m/s) between VALD & empirical lines for them to be considered candidates for the same line
