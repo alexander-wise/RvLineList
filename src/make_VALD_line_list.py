@@ -267,6 +267,29 @@ def getBlends(mask0, overlap_cutoff, allowBlends):
    return olisBoolean, nOverlap
 
 
+
+#blend rejection function
+def getBlendsFromFactors(mask0, blend_RV_cutoff):
+   """
+   Find mask entries below the threshold blend_RV_cutoff, and construct a boolean array telling is which lines to keep based on the specified cutoff.
+
+   Parameters:
+      mask0 (pandas.DataFrame): line list which must contain field "blend_RV_factor"
+
+      blend_RV_cutoff (float): threshold for line to be included in line list, expressed in m/s per K
+
+   """
+   assert isinstance(mask0, pd.DataFrame)
+   assert isinstance(blend_RV_cutoff, float)
+   nm = len(mask0)
+   blend_RV_factors = mask0["blend_RV_factor"]
+   olisBoolean = np.zeros(nm,dtype=bool)
+   for i in range(nm):
+      olisBoolean[i] = blend_RV_factors[i] < blend_RV_cutoff
+   
+   return olisBoolean
+
+
 def getTelluricIndices(mask, maskWavelengthsAreVacuum, overlap_cutoff, vel_slope_threshold=2000.0, RV_offset = 0.0, RV_range = 1e-4):
    # telluric_RV_threshold is the Earth's barycentric velocity as a fraction of speed of the light - to be added to overlap_cutoff for stars other than the sun, can be set to 0 for the sun
    fname = 'inputs/Telluric_Rejection/telluric_waves_'+str(vel_slope_threshold)+'.npy'
@@ -363,11 +386,13 @@ def hasMaskMatch(mask, maskWavelengthsAreVacuum, line_width=1e-5, mask_name='G2.
 
 
 #Use a VALD line list to make an RV line list. Note the output is converted to vacuum wavelengths by default.
-def getVALDmasks(lineprops=lineprops_G2, iron1Only='all', overlap_cutoff=1e-5, depth_cutoff=0.05, maskWavelengths = 'Reiners', allowBlends=0, rejectTelluricSlope=0.0, badLineFilter='none', outputVacuumWavelengths=True, saveMasks=False, outdir_masks = outdir_masks):
+def getVALDmasks(lineprops=lineprops_G2, iron1Only='all', blend_RV_factors_filename="blend_factors_0.001.csv", blend_RV_cutoff=2.0, overlap_cutoff=1e-5, depth_cutoff=0.05, maskWavelengths = 'Reiners', allowBlends=0, rejectTelluricSlope=0.0, badLineFilter='none', outputVacuumWavelengths=True, saveMasks=False, outdir_masks = outdir_masks):
    #lineprops are lambdas, excitation energies, oscillator strengths, and depths
    """
    lineprops=lineprops_G2
    iron1Only='all'
+   blend_RV_factors_filename="blend_factors_0.001.csv"
+   blend_RV_cutoff=2.0
    overlap_cutoff=1e-5
    depth_cutoff=0.05
    maskWavelengths='Reiners'
@@ -402,22 +427,29 @@ def getVALDmasks(lineprops=lineprops_G2, iron1Only='all', overlap_cutoff=1e-5, d
 
    #start the mask from lineprops
    mask = lineprops[["lambda","depth"]].copy(deep=True)
-   mask_depth_filtered = mask.loc[lineprops["bool_filter_depth_cutoff"]].reset_index(drop=True) #this is only for use in getBlends
 
    #trim mask to only include non-overlapping lines
-   # this intentionally happens after the depth filtering, so depth_cutoff is assumed to be small enough such that lines with lesser depths are insignifciant contributors to blends
-   # this necessarily happens before any other filtering, since other filters could remove part of a blend
-   olisBoolean, nOverlap = getBlends(mask_depth_filtered, overlap_cutoff, allowBlends)
-
-   #update lineprops with blend numbers. blend_number=-1 is assigned to lines not considered because they have depth below depth_cutoff
-   lineprops.loc[~lineprops["bool_filter_depth_cutoff"], "blend_number"] = -1
-   lineprops.loc[lineprops["bool_filter_depth_cutoff"], "blend_number"] = nOverlap
-
-   #apply allowBlends filter
-   #mask0 = mask0[olisBoolean]
-   #lineprops = lineprops[olisBoolean]
-   lineprops.loc[~lineprops["bool_filter_depth_cutoff"], "bool_filter_allowBlends"] = False
-   lineprops.loc[lineprops["bool_filter_depth_cutoff"], "bool_filter_allowBlends"] = olisBoolean
+   if os.path.isfile("inputs/blend_factors/"+blend_RV_factors_filename):
+      #use the calculated blend_RV_factors to determine if a line's blended neighbors are significant
+      print("Found blend_factors file. Using calculated factors and ignoring overlap_cutoff.")
+      blend_factors = pd.read_table(os.path.join("inputs","blend_factors", blend_RV_factors_filename),delimiter=',', engine="python")
+      lineprops["blend_RV_factor"] = np.NaN
+      lineprops.loc[blend_factors["VALD_index"].values, "blend_RV_factor"] = blend_factors["blend_RV_factor"].values
+      olisBoolean = getBlendsFromFactors(lineprops, blend_RV_cutoff)
+      lineprops.loc[:, "bool_filter_allowBlends"] = olisBoolean
+   else:
+      # use the overlap_cutoff parameter
+      # if used, then this intentionally happens after the depth filtering, so depth_cutoff is assumed to be small enough such that lines with lesser depths are insignifciant contributors to blends
+      # if used, then this necessarily happens before any other filtering, since other filters could remove part of a blend
+      print("Did not find blend_factors file. Using overlap_cutoff to determine blending.")
+      mask_depth_filtered = mask.loc[lineprops["bool_filter_depth_cutoff"]].reset_index(drop=True) #this is only for use in getBlends
+      olisBoolean, nOverlap = getBlends(mask_depth_filtered, overlap_cutoff, allowBlends)
+      #update lineprops with blend numbers. blend_number=-1 is assigned to lines not considered because they have depth below depth_cutoff
+      lineprops.loc[~lineprops["bool_filter_depth_cutoff"], "blend_number"] = -1
+      lineprops.loc[lineprops["bool_filter_depth_cutoff"], "blend_number"] = nOverlap
+      #apply allowBlends filter
+      lineprops.loc[~lineprops["bool_filter_depth_cutoff"], "bool_filter_allowBlends"] = False
+      lineprops.loc[lineprops["bool_filter_depth_cutoff"], "bool_filter_allowBlends"] = olisBoolean
 
    if 'Reiners' in maskWavelengths:
       coef_factors = {'':1.0, '101501':0.48, '10700':0.47, '26965':0.36, '34411':0.76} #from alex_sandbox.jl / get_line_shapes.jl code to generate plots of line RV vs depth
