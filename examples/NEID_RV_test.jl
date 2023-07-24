@@ -1,4 +1,4 @@
-local_dir = "/home/awise/Desktop/RvSpectML"
+local_dir = "/home/awise/.julia/dev"
 #local_dir = "/storage/work/afw5465/RvSpectML"
 
 using Pkg
@@ -10,26 +10,31 @@ using Pkg
 
 
 
-mask1 = RvLineList.read_mask_air(joinpath(pkgdir(RvLineList),"inputs","ESPRESSO_masks","G2.espresso.mas"))
-mask2 = RvLineList.read_mask(joinpath("/home/awise/Desktop/neid_masks/clean_masks","RvLineList_allowBlends=0_overlapcutoff=2.0e-5_rejectTelluricSlope=2000.0_badLineFilter=none,_quant=90_nbin=1_DP=true_binParam=depth_n=1_VALD_output=false_VACUUM.csv"))
- 
 linelist_names = SortedDict(Dict())
 
 push!(linelist_names, "new_mask"=>joinpath("/home/awise/Desktop/neid_masks/clean_masks","RvLineList_allowBlends=0_overlapcutoff=2.0e-5_rejectTelluricSlope=2000.0_badLineFilter=none,_quant=90_nbin=1_DP=true_binParam=depth_n=1_VALD_output=false_VACUUM.csv"))
 push!(linelist_names, "espresso"=>joinpath(pkgdir(RvLineList),"inputs","ESPRESSO_masks","G2.espresso.mas"))
 
+mask1 = RvLineList.read_mask_air(linelist_names["espresso"])
+mask2 = RvLineList.read_mask(linelist_names["new_mask"])
+ 
+
+
 pipeline_plan = PipelinePlan()
 reset_all_needs!(pipeline_plan)
 
+verbose=true
 if need_to(pipeline_plan,:read_spectra)
    if verbose println("# Finding what data files are avaliable.")  end
-   global df_files = RvLineList.get_NEID_best_days()
+   global df_files = RvLineList.get_NEID_best_days(Params[:pipeline_output_summary_path],startDate=RvLineList.Date(2021,01,01), endDate=RvLineList.Date(2022,06,14), nBest=300)
 
-   if verbose println("# Reading in customized parameters from param.jl.")  end
-   include(joinpath(local_dir,"param.jl"))
+   #if verbose println("# Reading in customized parameters from param.jl.")  end
+   #include(joinpath("/home/awise/Desktop/RvSpectML","param.jl"))
+   global ccf_mid_velocity = 0.0
+   global df_files_use = df_files
 
    if verbose println("# Reading in ", size(df_files_use,1), " FITS files.")  end
-   @time all_spectra = map(row->EXPRES.read_data(row,store_min_data=true, store_tellurics=true, normalization=norm_type), eachrow(df_files_use))
+   @time all_spectra = RvLineList.combine_NEID_daily_obs(Params[:daily_ccfs_base_path], Params[:daily_ccf_fn], Params[:daily_manifests_base_path], Params[:daily_manifest_fn], df_files_use)
    #for i in 1:length(all_spectra)
    #  all_spectra[i].metadata[:bjd] = all_spectra[i].metadata[:BARYMJD]
    #end
@@ -40,18 +45,18 @@ end
 
 # ccf_mid_velocity = 0.0 #since the empirical mask is at v=0, and we shifted the VALD masks to be at v=0 too, we must reset this global variable to zero.
 
-
+orders_to_use = Params[:orders_to_use]
 pixels_to_use = map(ord->min_col_default(all_spectra[1].inst,ord):max_col_default(all_spectra[1].inst,ord),orders_to_use)
-order_list_timeseries = extract_orders(all_spectra,pipeline_plan, orders_to_use=orders_to_use);
+order_list_timeseries = extract_orders(all_spectra,pipeline_plan, orders_to_use=orders_to_use, verbose=true)
 n_spectra = length(order_list_timeseries)
 n_orders = length(orders_to_use)
 
 ### NEW RUN: empirical mask
 # ccf_mid_velocity = 0.0 #since the empirical mask is at v=0, and we shifted the VALD masks to be at v=0 too, we must reset this global variable to zero.
 
-ll = string("empirical_mask")
+ll = string("espresso")
 #ll = "espresso"
-ll_v = string("vald_mask")
+ll_v = string("new_mask")
 
 line_width_50 = 7000.
 
@@ -62,7 +67,7 @@ println(linelist_names[ll])
 linelist_path = joinpath(local_dir,"RvLineList","inputs","empirical_masks",linelist_names[ll])
 mask_ll = prepare_line_list(linelist_path, all_spectra, pipeline_plan,  v_center_to_avoid_tellurics=0.0,
    Δv_to_avoid_tellurics = 1*RvSpectMLBase.max_bc+5*line_width_50+2*default_ccf_mask_v_width(EXPRES1D()),  orders_to_use=orders_to_use, verbose=true,
-   convert_air_to_vacuum=false)
+   convert_air_to_vacuum=true)
 
 need_to!(pipeline_plan,:read_line_list)
 need_to!(pipeline_plan,:clean_line_list_tellurics)
@@ -85,11 +90,30 @@ mask_empirical_total = mask_ll[hm,:]
 masks_empirical = binMask(mask_empirical_total,nbin)
 mask_empirical = masks_empirical[bin_n]
 
+
+dont_need_to!(pipeline_plan,:clean_line_list_tellurics)
+
+lsf_width = 2.0e3 #estimated line width for telluric avoidance
+mask_type = :gaussian #mask shape. Options: :tophat, :gaussian, :supergaussian, :halfcos
+mask_scale_factor = 4.0 #approximate number of pixels in the width scale of the mask
+fwtf = 2.0 #fraction of the FWHM of the CCF to fit
+RV_fit_type = :gaussian #type of fit to use on CCF to measure RV. Options: :quadratic, :gaussian
+tophap_ccf_mask_scale_factor=1.6
+
+
 println("# mask_scale_factor = ", mask_scale_factor, ", frac_width_to_fit =  ", fwtf, ". ")
-@time (ccfs_empirical, v_grid) = ccf_total(order_list_timeseries, mask_empirical, pipeline_plan,  mask_scale_factor=mask_scale_factor, range_no_mask_change=5*line_width_50, ccf_mid_velocity=0.0, v_step=100,
-   #v_max=RvSpectMLBase.max_bc,
-   v_max= 0*RvSpectMLBase.max_bc+5*line_width_50, #+2*line_width_50,
-   calc_ccf_var=false, recalc=true, mask_type = mask_type)
+#@time (ccfs_empirical, v_grid) = ccf_total(order_list_timeseries, mask_ll, pipeline_plan,  mask_scale_factor=mask_scale_factor,
+#   range_no_mask_change=5*line_width_50, ccf_mid_velocity=0.0, v_step=100,
+#   v_max= 0*RvSpectMLBase.max_bc+5*line_width_50, #+2*line_width_50,
+#   calc_ccf_var=false, recalc=true, mask_type = mask_type)
+
+@time (order_ccfs, order_ccf_vars, v_grid_order_ccfs) = ccf_orders(order_list_timeseries, mask_ll, pipeline_plan, mask_type=:gaussian,
+   #Δfwhm=Δfwhm,
+   mask_scale_factor=mask_scale_factor, range_no_mask_change=5*line_width_50, ccf_mid_velocity=ccf_mid_velocity, v_step=100,
+   #v_max=max(range_no_mask_change*line_width_50,2*max_bc),
+   v_max= 0*RvSpectMLBase.max_bc+5*line_width_50, #+2*line_width_50
+   orders_to_use=orders_to_use, allow_nans=true, calc_ccf_var=true, recalc=true)
+
 push!(ccfs, string("ccfs_empirical_",target) => ccfs_empirical)
 push!(v_grids, string("v_grid_empirical_",target) => v_grid)
 push!(pipeline_plans, string("pipeline_plan_empirical_",target) => pipeline_plan)

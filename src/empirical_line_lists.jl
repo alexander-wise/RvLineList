@@ -354,7 +354,8 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       if params[:inst] == :expres
          all_spectra = EXPRES_read_spectra(data_path) #note this is in expres_old.jl and needs to be loaded manually for now. Also this uses data_path and max_spectra_to_use param (not included in params_to_check since this is deprecated)
       elseif params[:inst] == :neid
-         all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100))
+         #all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100))
+         all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,11,01), endDate=Date(2021,12,31), nBest=30))
       else
          print("Error: spectra failed to load; inst not supported.")
       end
@@ -428,7 +429,7 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
          fits_to_lines[i,:original_chunk_id] = original_chunk_id
          fits_to_lines[i,:original_pixels] = original_pixels
       end
-      #@time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_in_template )
+         #@time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_in_template )
    
       if save_data(pipeline_plan,:fit_lines)
          CSV.write(joinpath(output_dir,"linefinder",params[:fits_target_str] * "_linefinder_accepted_lines.csv"), lines_to_fit )
@@ -529,7 +530,7 @@ function select_line_fits_with_good_depth_width_slope(params::Dict{Symbol,Any}, 
    good_lines_bool = fit_distrib[:,:bool_filter_min_frac_converged] .&& fit_distrib[:,:bool_filter_median_depth_between_5percent_and_1] .&& fit_distrib[:,:bool_filter_std_velocity_width_quant] .&& fit_distrib[:,:bool_filter_std_local_continuum_slope_quant]
 
    good_lines_alt = fit_distrib[good_lines_bool,:]
-
+   
    if verbose
       println("# Found ", size(good_lines_alt,1), " good lines (std_depth_width_slope), rejected ", size(fit_distrib,1)-size(good_lines_alt,1), " lines.")
    end
@@ -601,6 +602,25 @@ function fit_all_line_RVs_in_chunklist_timeseries(clt::AbstractChunkListTimeseri
    map(idx -> append!(df,fit_one_line_RVs_in_chunklist_timeseries(clt, template, template_deriv, lines, idx)) , 1:size(lines,1))
    return df
  end
+
+
+
+function get_one_line_bisector_in_chunklist_timeseries(clt::AbstractChunkListTimeseries, template, template_deriv, lines::DataFrame, idx::Int64)
+   @assert 1 <= idx <= size(lines,1)
+   λmin = lines[idx,:fit_min_λ]
+   λmax = lines[idx,:fit_max_λ]
+   chid = lines[idx,:chunk_id]
+   df = fit_line_RVs_in_chunklist_timeseries(clt, template, template_deriv, λmin, λmax, chid)
+   df[!,:line_id] .= idx
+   return df
+end
+
+function get_all_line_bisectors_in_chunklist_timeseries(clt::AbstractChunkListTimeseries, template, template_deriv, lines::DataFrame)
+   df = DataFrame()
+   map(idx -> append!(df,fit_one_line_RVs_in_chunklist_timeseries(clt, template, template_deriv, lines, idx)) , 1:size(lines,1))
+   return df
+ end
+
 
 
 """
