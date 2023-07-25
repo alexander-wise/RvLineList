@@ -1,7 +1,4 @@
 
-#local_dir = "/home/awise/Desktop/RvSpectML/RvLineList"
-#local_dir = "/storage/work/afw5465/RvSpectML"
-
 #using Pkg
 # Pkg.activate(".")
 using RvLineList, DataFrames, CSV, ArgParse
