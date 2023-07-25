@@ -216,6 +216,7 @@ combined_mask_df[!,:passed_all_bool_filters] = (combined_mask_df[:,:bool_filter_
 .&& combined_mask_df[:,:bool_filter_nan_bad_line]
 .&& combined_mask_df[:,:bool_filter_depth_cutoff]
 .&& combined_mask_df[:,:bool_filter_allowBlends]
+.&& combined_mask_df[:,:bool_filter_blend_factors]
 .&& combined_mask_df[:,:bool_filter_iron1Only]
 .&& combined_mask_df[:,:bool_filter_rejectTelluricSlope]
 .&& combined_mask_df[:,:bool_filter_badLineFilter])
@@ -232,7 +233,7 @@ binned_masks = binMask(mask, Params[:nbin], binParam=Params[:binParam])
 #rename!(binned_masks[1], [:lambda, :depth])
 
 for bin_n in 1:Params[:nbin]
-   saveStr = "RvLineList" * "_allowBlends="*string(Params[:allowBlends]) * "_overlapCutoff="*string(Params[:overlap_cutoff]) * "_depthCutoff="*string(Params[:depth_cutoff]) * "_rejectTelluricSlope="*string(Params[:rejectTelluricSlope]) * "_badLineFilter="*Params[:badLineFilter]* "_quant="*Params[:quant] * "_nbin="*string(Params[:nbin]) * "_DP="*string(Params[:depthPercentile]) * "_binParam="*string(Params[:binParam]) * "_n="*string(bin_n) * "_long_output="*string(Params[:long_output]) * "_VACUUM" * ".csv"
+   saveStr = "RvLineList" * "_allowBlends="*string(Params[:allowBlends]) * "_overlapCutoff="*string(Params[:overlap_cutoff]) * "_blend_RV_cutoff=" * (length(Params[:blend_RV_factors_filename])>0 ? string(Params[:blend_RV_cutoff]) : "0") * "_depthCutoff="*string(Params[:depth_cutoff]) * "_rejectTelluricSlope="*string(Params[:rejectTelluricSlope]) * "_badLineFilter="*Params[:badLineFilter]* "_quant="*Params[:quant] * "_nbin="*string(Params[:nbin]) * "_DP="*string(Params[:depthPercentile]) * "_binParam="*string(Params[:binParam]) * "_n="*string(bin_n) * "_long_output="*string(Params[:long_output]) * "_VACUUM" * ".csv"
    CSV.write(joinpath(Params[:output_dir],"clean_masks",saveStr),binned_masks[bin_n])
 end
 
