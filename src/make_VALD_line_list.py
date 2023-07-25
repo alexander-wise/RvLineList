@@ -285,7 +285,7 @@ def getBlendsFromFactors(mask0, blend_RV_cutoff):
    blend_RV_factors = mask0["blend_RV_factor"]
    olisBoolean = np.zeros(nm,dtype=bool)
    for i in range(nm):
-      olisBoolean[i] = blend_RV_factors[i] < blend_RV_cutoff
+      olisBoolean[i] = abs(blend_RV_factors[i]) < blend_RV_cutoff
    
    return olisBoolean
 
