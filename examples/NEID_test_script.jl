@@ -152,7 +152,7 @@ end
 import Pandas.DataFrame as pd_df
 
 @pyinclude("src/make_VALD_line_list.py")
-@time VALD_mask, VALD_mask_long = py"getVALDmasks"(overlap_cutoff=Params[:overlap_cutoff], depth_cutoff=Params[:depth_cutoff], iron1Only=Params[:iron1Only], badLineFilter=Params[:badLineFilter], allowBlends=Params[:allowBlends])
+@time VALD_mask, VALD_mask_long = py"getVALDmasks"(blend_RV_factors_filename=Params[:blend_RV_factors_filename], blend_RV_cutoff=Params[:blend_RV_cutoff], overlap_cutoff=Params[:overlap_cutoff], depth_cutoff=Params[:depth_cutoff], iron1Only=Params[:iron1Only], badLineFilter=Params[:badLineFilter], allowBlends=Params[:allowBlends])
 
 #empirical_mask_3col = select(empirical_mask_filtered,[:lambda, :depth, :line_id])
 #rename!(empirical_mask_3col, [:lambda, :depth, :line_id])
