@@ -30,16 +30,13 @@ path_params = Dict(
 #:pipeline_output_summary_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso/summary_espressoG2_norm=blaze&mask=1.csv",
 #:pipeline_output_summary_path => "/home/awise/data/neid/solar/summary_1.csv",
 
-:pipeline_output_summary_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/summary_espressoG2_norm=cont&mask=3.csv",
-#:pipeline_output_summary_path => "/home/awise/data/neid/solar/summary_espressoG2_norm=blaze&mask=1.csv",
+:pipeline_output_summary_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/summary_espressoG2_norm=blaze&mask=1.csv" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/summary_espressoG2_norm=cont&mask=3.csv",
 
-:daily_ccfs_base_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/",
-#:daily_ccfs_base_path => "/home/awise/data/neid/solar/",
+:daily_ccfs_base_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/",
 #:daily_ccf_fn => "daily_ccfs_1.jld2",
 :daily_ccf_fn => "daily_ccfs_espressoG2_norm=cont&mask=3.jld2",
 
-:daily_manifests_base_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/manifest",
-#:daily_manifests_base_path => "/home/awise/data/neid/solar/",
+:daily_manifests_base_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/manifest",
 :daily_manifest_fn => "manifest.csv",
 
 :output_dir => joinpath(pwd(),"outputs"),
@@ -76,7 +73,9 @@ linelist_params = Dict(
 #maskWavelengths = string("Reiners",target) #keyword for mask wavelengths - should be e.g. Reiners or Reiners101501
 :allowBlends => 0, #number of blends allowed with each line, e.g. 0 for single lines only, 1 for doublets only, [0,1] for singlets and doublets
 :overlap_cutoff => 2.0e-5, #distance between lines required for them to be categorized as a blend, expressed as a fraction of the speed of light
-:depth_cutoff => 0.01,
+:blend_RV_factors_filename => "blend_factors_0.001.csv", #filename for calculated blend RV factors. If the file is present, then these factors will be used instead of allowBlends and overlap_cutoff.
+:blend_RV_cutoff => 2.0, #cutoff value, in m/s per K, below which lines are considered not significantly contaminated by blends. Only used if :blend_RV_factors_filename is specified.
+:depth_cutoff => 0.001, #line depth, as a fraction of continuum, to be considered negligible. Note this parameter does not affect calculated blend RV factors.
 :iron1Only => "all", # which species to use - options are "Fe1", "nonFe1", "all"
 :badLineFilter => "none", #which mask to use to filter out bad line - only lines within ~ 3 km/s of one of these mask lines will be kept
 :rejectTelluricSlope => 2000.0, #derivative of spectrum required for telluric line rejection - a value of 0 turns off telluric rejection

@@ -1,7 +1,4 @@
 
-#local_dir = "/home/awise/Desktop/RvSpectML/RvLineList"
-#local_dir = "/storage/work/afw5465/RvSpectML"
-
 #using Pkg
 # Pkg.activate(".")
 using RvLineList, DataFrames, CSV, ArgParse
@@ -15,6 +12,12 @@ include(joinpath(local_dir,"inputs","param.jl"))
 s = ArgParseSettings()
 
 @add_arg_table s begin
+   "--blend_RV_factors_filename"
+      help = "filename for calculated blend RV factors. If the file is present, then these factors will be used instead of allowBlends and overlap_cutoff."
+      arg_type = String
+   "--blend_RV_cutoff"
+      help = "cutoff value, in m/s per K, below which lines are considered not significantly contaminated by blends. Only used if :blend_RV_factors_filename is specified."
+      arg_type = Float64
    "--allowBlends"
       help = "number of blends allowed with each line, e.g. 0 for single lines only, 1 for doublets only, [0,1] for singlets and doublets"
       arg_type = Int
@@ -22,7 +25,7 @@ s = ArgParseSettings()
       help = "distance between lines required for them to be categorized as a blend, expressed as a fraction of the speed of light"
       arg_type = Float64
    "--depth_cutoff"
-      help = "line depth, as a fraction of continuum, to be considered negligible"
+      help = "line depth, as a fraction of continuum, to be considered negligible. Note this parameter does not affect calculated blend RV factors."
       arg_type = Float64
    "--rejectTelluricSlope"
       help = "derivative of spectrum required for telluric line rejection, in units of normalized depth per fraction of speed of light - a value of 0 turns off telluric rejection, 2000-10000 is recommended range in values"
@@ -46,6 +49,17 @@ end
 
    parsed_args = parse_args(s)
 
+
+
+if parsed_args["blend_RV_factors_filename"] !== nothing
+   println("Found command-line arg blend_RV_factors_filename. Overwriting param file definition of this arg.")
+   Params[:blend_RV_factors_filename] = parsed_args["blend_RV_factors_filename"]
+end
+
+if parsed_args["blend_RV_cutoff"] !== nothing
+   println("Found command-line arg blend_RV_cutoff. Overwriting param file definition of this arg.")
+   Params[:blend_RV_cutoff] = parsed_args["blend_RV_cutoff"]
+end
 
 if parsed_args["allowBlends"] !== nothing
    println("Found command-line arg allowBlends. Overwriting param file definition of this arg.")
@@ -138,7 +152,7 @@ end
 import Pandas.DataFrame as pd_df
 
 @pyinclude("src/make_VALD_line_list.py")
-@time VALD_mask, VALD_mask_long = py"getVALDmasks"(overlap_cutoff=Params[:overlap_cutoff], depth_cutoff=Params[:depth_cutoff], iron1Only=Params[:iron1Only], badLineFilter=Params[:badLineFilter], allowBlends=Params[:allowBlends])
+@time VALD_mask, VALD_mask_long = py"getVALDmasks"(blend_RV_factors_filename=Params[:blend_RV_factors_filename], blend_RV_cutoff=Params[:blend_RV_cutoff], overlap_cutoff=Params[:overlap_cutoff], depth_cutoff=Params[:depth_cutoff], iron1Only=Params[:iron1Only], badLineFilter=Params[:badLineFilter], allowBlends=Params[:allowBlends])
 
 #empirical_mask_3col = select(empirical_mask_filtered,[:lambda, :depth, :line_id])
 #rename!(empirical_mask_3col, [:lambda, :depth, :line_id])

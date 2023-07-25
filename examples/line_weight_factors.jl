@@ -81,6 +81,7 @@ end
 VALD_data = CSV.read(joinpath("inputs", "VALD_extract_stellar", "VALD-Solar-0.001-merged.txt"), delim=',', skipto=4, footerskip=108, header = 3, DataFrame)
 select!(VALD_data, [2,3,10])
 rename!(VALD_data, ["wavelength", "EE", "depth"])
+VALD_indices_NEID = findall(λ_NEID_low .< VALD_data[!,:wavelength] .< λ_NEID_high)
 filter!(row -> (λ_NEID_low < row.wavelength < λ_NEID_high), VALD_data)
 VALD_data[:,:wavelength] .= airVacuumConversion.(VALD_data[:,:wavelength], toAir=false)
 
@@ -157,8 +158,8 @@ function make_VALD_data_blend_factors_file(VALD_data::DataFrame, T_form_data::Da
       end
       blend_factors[i] = ΔRV(i, VALD_data, T_form_data)[1]
    end
-   df = DataFrame(VALD_index = 1:n_VALD, blend_RV_factor = blend_factors)
-   CSV.write(joinpath("inputs", "VALD_extract_stellar","blend_factors_0.001.csv"), df)
+   df = DataFrame(VALD_index = VALD_indices_NEID, blend_RV_factor = blend_factors)
+   CSV.write(joinpath("inputs", "blend_factors","blend_factors_0.001.csv"), df)
    return df
 end
 
