@@ -244,7 +244,21 @@ function match_VALD_to_empirical(empirical_mask::DataFrame, VALD_mask::DataFrame
    else
       sub_mask_out = select!(sub_mask, Not([:mask_df_name]))
    end
-   return sort(sub_mask_out,[:lambda])
+   sub_mask_out = sort(sub_mask_out,[:lambda])
+   #remove duplicate mask entries due to the same empirical line showing up on multiple orders
+   mask_out = DataFrame()
+   i0=1
+   i1=i0+1
+   while i0 <= size(sub_mask_out)[1]
+      while (i1 <= size(sub_mask_out)[1]) && wave_equal(sub_mask_out[i0,:lambda], sub_mask_out[i1,:lambda], threshold=threshold)
+         i1+=1
+      end
+      matches = DataFrame(sub_mask_out[i0:i1-1,:])
+      min_var_match = DataFrame(matches[findmin(matches[:,:mean_template_var])[2],:])
+      append!(mask_out,min_var_match)
+      i0=i1
+   end
+   return sort(mask_out,[:lambda])
 end
 
 
