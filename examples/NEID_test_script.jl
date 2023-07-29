@@ -165,20 +165,6 @@ import Pandas.DataFrame as pd_df
 #combined_mask = py"mask_intersection"(empirical_mask_pd, Params[:long_output] ? VALD_mask_long : VALD_mask, threshold=500.0)
 #combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
 
-"""
-thresholds = [100,200,300,400,500,600,700,800,900,1000,1200,1400,1600,1800,2000,2500,3000,3500,4000,4500,5000,5500,6000]
-lengths = zeros(length(thresholds))
-for i in 1:length(thresholds)
-   @time lengths[i] = length(py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=thresholds[i]))
-end
-using Plots
-plot(thresholds,lengths, legend=false)
-xlims!(0,2000)
-xlabel!("velocity threshold")
-ylabel!("number of total mask matches found")
-savefig("/home/awise/Desktop/mask_matching_cutoff.png")
-"""
-
 function pd_df_to_df(df_pd)
    df = DataFrame()
    for col in df_pd.columns
@@ -195,6 +181,21 @@ VALD_mask_depth_filtered_df = VALD_mask_long_df[ VALD_mask_long_df[!,:bool_filte
 
 #merge VALD and empirical masks
 combined_mask_df = match_VALD_to_empirical(empirical_mask, VALD_mask_depth_filtered_df, threshold=Params[:matching_threshold])
+
+"""
+thresholds = [100,200,300,400,500,600,700,800,900,1000,1200,1400,1600,1800,2000,2500,3000,3500,4000,4500,5000,5500,6000]
+lengths = zeros(length(thresholds))
+for i in 1:length(thresholds)
+   @time lengths[i] = size(match_VALD_to_empirical(empirical_mask, VALD_mask_depth_filtered_df, threshold=thresholds[i]))[1]
+end
+using Plots
+plot(thresholds,lengths, legend=false)
+xlims!(0,2000)
+xlabel!("velocity threshold")
+ylabel!("number of total mask matches found")
+savefig("/home/awise/Desktop/mask_matching_cutoff.png")
+"""
+
 
 combined_mask_pd = pd_df(combined_mask_df)
 
