@@ -194,7 +194,7 @@ VALD_mask_long_df[!,:species] .= convert.(String,VALD_mask_long_df[!,:species])
 VALD_mask_depth_filtered_df = VALD_mask_long_df[ VALD_mask_long_df[!,:bool_filter_depth_cutoff], :]
 
 #merge VALD and empirical masks
-combined_mask_df = mask_intersection(empirical_mask, VALD_mask_depth_filtered_df, threshold=Params[:matching_threshold])
+combined_mask_df = match_VALD_to_empirical(empirical_mask, VALD_mask_depth_filtered_df, threshold=Params[:matching_threshold])
 
 combined_mask_pd = pd_df(combined_mask_df)
 

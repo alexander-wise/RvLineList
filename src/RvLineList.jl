@@ -49,7 +49,7 @@ using DelimitedFiles #allows reading of delimited files similarly to the python 
 include("masks.jl")
 export read_mask_air, read_mask_vacuum, binMask
 export get_param_range, get_lambda_range, get_depth_range
-export mask_intersection
+export match_VALD_to_empirical
 
 #normaliation of EXPRES spectra - this file will not be needed once these functions are replaced with working versions from EchelleInstruments
 #include("expres_norm.jl")
