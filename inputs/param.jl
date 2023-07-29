@@ -90,7 +90,7 @@ linelist_params = Dict(
 :quant => "90", #quantile for stability of fit params for empirical masks, expressed as a string out of 100
 :min_frac_converged => "100", #minimum fraction of the line fits that converged in the dataset for the empirical line to be used, expressed as a string out of 100
 :line_width_50 => 7392.0, #NEID solar line width for ESPRESSO G2 mask, mask_scale_factor = 2.0, other ccf params default values
-:matching_threshold => 500.0 #distance (in m/s) between VALD & empirical lines for them to be considered candidates for the same line
+:matching_threshold => 1000.0 #distance (in m/s) between VALD & empirical lines for them to be considered candidates for the same line
 )
 
 merge!(Params,linelist_params)

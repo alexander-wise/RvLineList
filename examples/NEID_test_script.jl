@@ -215,11 +215,11 @@ combined_mask_df[!,:passed_all_bool_filters] = (combined_mask_df[:,:bool_filter_
 .&& combined_mask_df[:,:bool_filter_std_local_continuum_slope_quant]
 .&& combined_mask_df[:,:bool_filter_neg_bad_line]
 .&& combined_mask_df[:,:bool_filter_nan_bad_line]
+.&& combined_mask_df[:,:bool_filter_rejectTelluricSlope]
 .&& combined_mask_df[:,:bool_filter_depth_cutoff]
 .&& combined_mask_df[:,:bool_filter_allowBlends]
 .&& combined_mask_df[:,:bool_filter_blend_factors]
 .&& combined_mask_df[:,:bool_filter_iron1Only]
-.&& combined_mask_df[:,:bool_filter_rejectTelluricSlope]
 .&& combined_mask_df[:,:bool_filter_badLineFilter])
 
 combined_mask_df_filtered = combined_mask_df[ combined_mask_df[!,:passed_all_bool_filters], :]
