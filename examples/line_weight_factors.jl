@@ -73,17 +73,17 @@ end
 
 #note, we are missing a factor of T here, so we are actualy calculating delta RV / T
 function numerator0(λ::Float64, λ0::Vector{Float64}, D0::Vector{Float64}, ϵ::Vector{Float64}, T_form::Vector{Union{Missing, Float64}})
-   return dFdT(λ, λ0, D0, ϵ, T_form) * dFdlogλ(λ, λ0, D0)
+   return dFdT(λ, λ0, D0, ϵ, T_form) * dFdlogλ(λ, λ0, D0) / λ
 end
 
 #same as above function, but simple means it uses a constant for dDdT (and the central line has dDdT=0)
 function numerator0_simple(λ::Float64, λ0::Vector{Float64}, D0::Vector{Float64}, ϵ::Vector{Float64}, T_form::Vector{Union{Missing, Float64}}, index_center=0)
-   return dFdT_simple(λ, λ0, D0, ϵ, T_form, index_center) * dFdlogλ(λ, λ0, D0)
+   return dFdT_simple(λ, λ0, D0, ϵ, T_form, index_center) * dFdlogλ(λ, λ0, D0)  / λ
 end
 
 
 function denominator0(λ::Float64, λ0::Vector{Float64}, D0::Vector{Float64})
-   return dFdlogλ(λ, λ0, D0) * dFdlogλ(λ, λ0, D0)
+   return dFdlogλ(λ, λ0, D0) * dFdlogλ(λ, λ0, D0)  / λ
 end
 
 
