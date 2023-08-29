@@ -702,7 +702,7 @@ function getTelluricIndices(mask, maskWavelengthsAreVacuum, overlap_cutoff; vel_
       dD = X[2:end,2] - X[1:end-1,2] #change in depth between adjacent pixels
       dV = (X[2:end,1] - X[1:end-1,1]) ./ X[1:end-1,1] #change in velocity between adjacent pixels
       dD_dV = dD ./ dV #change in depth with respect to velocity
-      telluric_indices = findall((abs.(dD_dV) .> vel_slope_threshold) .| (X[2:end,2] .< 0.1)) #where slope is significant or telluric line is saturated
+      telluric_indices = findall((abs.(dD_dV) .> vel_slope_threshold) .| (X[2:end,2] .< 0.7)) #where slope is significant or telluric line is deep
       
       npzwrite(fname, X[telluric_indices,1])
       telluric_waves = npzread(fname)*10.0 #the *10.0 converts from nm to Angstroms

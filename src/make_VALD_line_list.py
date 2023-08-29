@@ -245,7 +245,7 @@ def getBlends(mask0, overlap_cutoff, allowBlends):
    maskCenters = mask0["lambda"]
    nm = len(mask0)
    depths = mask0["depth"]
-   widths = np.array([overlap_cutoff if (depths[i]<0.65) else (1.+(depths[i]-0.65)*4.)*overlap_cutoff for i in range(len(mask0))]) #note: this function is based on visual analysis of the plot of measured FWHM vs line depth from VALD made in measureBISandLW()
+   widths = np.array([overlap_cutoff if (depths[i]<0.65) else (1.+(depths[i]-0.65)*4.)*overlap_cutoff for i in range(len(mask0))]) #note: this function is based on visual analysis of the plot of measured FWHM vs line depth from VALD made in measureBISandLW() in measureRadialVelocity_sandbox.py
    #widths = np.array([overlap_cutoff if (depths[i]<0.6) else (1.+(depths[i]-0.6)*5.)*overlap_cutoff for i in range(len(mask0))]) #note: this function was derived from visual analysis of HWHM vs line depth in HD101501, using a "fit" mask, i.e. data-derived. this mask may contain blends, and blends seem to cause the differerence between these formulae
    rights = maskCenters*(1.+widths)
    lefts = maskCenters*(1.-widths)
@@ -305,9 +305,10 @@ def getTelluricIndices(mask, maskWavelengthsAreVacuum, overlap_cutoff, vel_slope
       telluric_indices = np.where((abs(dD_dV)>vel_slope_threshold) | (X[:,1][1:] < 0.1))[0] #where slope is significant or telluric line is saturated
       """
       #plot tellurics - commented out as this segement is only used in debugging
+      Y = telluric_indices
       clf()
       plot(X[:,0]*10.,X[:,1], color='brown', label='Telluric Spectrum')
-      plot(X[:,0][Y]*10.,X[:,1][Y],'b.', label='Slope > '+str(+slope_threshold))
+      plot(X[:,0][Y]*10.,X[:,1][Y],'b.', label='Slope > '+str(+vel_slope_threshold))
       xlabel(r'Wavelength ($\AA$)', size=20)
       ylabel('Normalized Flux', size=20)
       title('Telluric Rejection based on Slope Criteria', size=15)
