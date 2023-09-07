@@ -1,7 +1,4 @@
 
-#local_dir = "/home/awise/Desktop/RvSpectML/RvLineList"
-#local_dir = "/storage/work/afw5465/RvSpectML"
-
 #using Pkg
 # Pkg.activate(".")
 using RvLineList, DataFrames, CSV, ArgParse
@@ -15,6 +12,12 @@ include(joinpath(local_dir,"inputs","param.jl"))
 s = ArgParseSettings()
 
 @add_arg_table s begin
+   "--blend_RV_factors_filename"
+      help = "filename for calculated blend RV factors. If the file is present, then these factors will be used instead of allowBlends and overlap_cutoff."
+      arg_type = String
+   "--blend_RV_cutoff"
+      help = "cutoff value, in m/s per K, below which lines are considered not significantly contaminated by blends. Only used if :blend_RV_factors_filename is specified."
+      arg_type = Float64
    "--allowBlends"
       help = "number of blends allowed with each line, e.g. 0 for single lines only, 1 for doublets only, [0,1] for singlets and doublets"
       arg_type = Int
@@ -22,7 +25,7 @@ s = ArgParseSettings()
       help = "distance between lines required for them to be categorized as a blend, expressed as a fraction of the speed of light"
       arg_type = Float64
    "--depth_cutoff"
-      help = "line depth, as a fraction of continuum, to be considered negligible"
+      help = "line depth, as a fraction of continuum, to be considered negligible. Note this parameter does not affect calculated blend RV factors."
       arg_type = Float64
    "--rejectTelluricSlope"
       help = "derivative of spectrum required for telluric line rejection, in units of normalized depth per fraction of speed of light - a value of 0 turns off telluric rejection, 2000-10000 is recommended range in values"
@@ -46,6 +49,17 @@ end
 
    parsed_args = parse_args(s)
 
+
+
+if parsed_args["blend_RV_factors_filename"] !== nothing
+   println("Found command-line arg blend_RV_factors_filename. Overwriting param file definition of this arg.")
+   Params[:blend_RV_factors_filename] = parsed_args["blend_RV_factors_filename"]
+end
+
+if parsed_args["blend_RV_cutoff"] !== nothing
+   println("Found command-line arg blend_RV_cutoff. Overwriting param file definition of this arg.")
+   Params[:blend_RV_cutoff] = parsed_args["blend_RV_cutoff"]
+end
 
 if parsed_args["allowBlends"] !== nothing
    println("Found command-line arg allowBlends. Overwriting param file definition of this arg.")
@@ -138,7 +152,7 @@ end
 import Pandas.DataFrame as pd_df
 
 @pyinclude("src/make_VALD_line_list.py")
-@time VALD_mask, VALD_mask_long = py"getVALDmasks"(overlap_cutoff=Params[:overlap_cutoff], depth_cutoff=Params[:depth_cutoff], iron1Only=Params[:iron1Only], badLineFilter=Params[:badLineFilter], allowBlends=Params[:allowBlends])
+@time VALD_mask, VALD_mask_long = py"getVALDmasks"(blend_RV_factors_filename=Params[:blend_RV_factors_filename], blend_RV_cutoff=Params[:blend_RV_cutoff], overlap_cutoff=Params[:overlap_cutoff], depth_cutoff=Params[:depth_cutoff], iron1Only=Params[:iron1Only], badLineFilter=Params[:badLineFilter], allowBlends=Params[:allowBlends])
 
 #empirical_mask_3col = select(empirical_mask_filtered,[:lambda, :depth, :line_id])
 #rename!(empirical_mask_3col, [:lambda, :depth, :line_id])
@@ -150,20 +164,6 @@ import Pandas.DataFrame as pd_df
 
 #combined_mask = py"mask_intersection"(empirical_mask_pd, Params[:long_output] ? VALD_mask_long : VALD_mask, threshold=500.0)
 #combined_mask = py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=500.0)
-
-"""
-thresholds = [100,200,300,400,500,600,700,800,900,1000,1200,1400,1600,1800,2000,2500,3000,3500,4000,4500,5000,5500,6000]
-lengths = zeros(length(thresholds))
-for i in 1:length(thresholds)
-   @time lengths[i] = length(py"mask_intersection"(empirical_mask_pd, VALD_mask_long, threshold=thresholds[i]))
-end
-using Plots
-plot(thresholds,lengths, legend=false)
-xlims!(0,2000)
-xlabel!("velocity threshold")
-ylabel!("number of total mask matches found")
-savefig("/home/awise/Desktop/mask_matching_cutoff.png")
-"""
 
 function pd_df_to_df(df_pd)
    df = DataFrame()
@@ -180,7 +180,22 @@ VALD_mask_long_df[!,:species] .= convert.(String,VALD_mask_long_df[!,:species])
 VALD_mask_depth_filtered_df = VALD_mask_long_df[ VALD_mask_long_df[!,:bool_filter_depth_cutoff], :]
 
 #merge VALD and empirical masks
-combined_mask_df = mask_intersection(empirical_mask, VALD_mask_depth_filtered_df, threshold=500.0)
+combined_mask_df = match_VALD_to_empirical(empirical_mask, VALD_mask_depth_filtered_df, threshold=Params[:matching_threshold])
+
+"""
+thresholds = [100,200,300,400,500,600,700,800,900,1000,1200,1400,1600,1800,2000,2500,3000,3500,4000,4500,5000,5500,6000]
+lengths = zeros(length(thresholds))
+for i in 1:length(thresholds)
+   @time lengths[i] = size(match_VALD_to_empirical(empirical_mask, VALD_mask_depth_filtered_df, threshold=thresholds[i]))[1]
+end
+using Plots
+plot(thresholds,lengths, legend=false)
+xlims!(0,2000)
+xlabel!("velocity threshold")
+ylabel!("number of total mask matches found")
+savefig("/home/awise/Desktop/mask_matching_cutoff.png")
+"""
+
 
 combined_mask_pd = pd_df(combined_mask_df)
 
@@ -200,10 +215,11 @@ combined_mask_df[!,:passed_all_bool_filters] = (combined_mask_df[:,:bool_filter_
 .&& combined_mask_df[:,:bool_filter_std_local_continuum_slope_quant]
 .&& combined_mask_df[:,:bool_filter_neg_bad_line]
 .&& combined_mask_df[:,:bool_filter_nan_bad_line]
+.&& combined_mask_df[:,:bool_filter_rejectTelluricSlope]
 .&& combined_mask_df[:,:bool_filter_depth_cutoff]
 .&& combined_mask_df[:,:bool_filter_allowBlends]
+.&& combined_mask_df[:,:bool_filter_blend_factors]
 .&& combined_mask_df[:,:bool_filter_iron1Only]
-.&& combined_mask_df[:,:bool_filter_rejectTelluricSlope]
 .&& combined_mask_df[:,:bool_filter_badLineFilter])
 
 combined_mask_df_filtered = combined_mask_df[ combined_mask_df[!,:passed_all_bool_filters], :]
@@ -218,7 +234,7 @@ binned_masks = binMask(mask, Params[:nbin], binParam=Params[:binParam])
 #rename!(binned_masks[1], [:lambda, :depth])
 
 for bin_n in 1:Params[:nbin]
-   saveStr = "RvLineList" * "_allowBlends="*string(Params[:allowBlends]) * "_overlapCutoff="*string(Params[:overlap_cutoff]) * "_depthCutoff="*string(Params[:depth_cutoff]) * "_rejectTelluricSlope="*string(Params[:rejectTelluricSlope]) * "_badLineFilter="*Params[:badLineFilter]* "_quant="*Params[:quant] * "_nbin="*string(Params[:nbin]) * "_DP="*string(Params[:depthPercentile]) * "_binParam="*string(Params[:binParam]) * "_n="*string(bin_n) * "_long_output="*string(Params[:long_output]) * "_VACUUM" * ".csv"
+   saveStr = "RvLineList" * "_allowBlends="*string(Params[:allowBlends]) * "_overlapCutoff="*string(Params[:overlap_cutoff]) * "_blend_RV_cutoff=" * (length(Params[:blend_RV_factors_filename])>0 ? string(Params[:blend_RV_cutoff]) : "0") * "_depthCutoff="*string(Params[:depth_cutoff]) * "_rejectTelluricSlope="*string(Params[:rejectTelluricSlope]) * "_badLineFilter="*Params[:badLineFilter]* "_quant="*Params[:quant] * "_nbin="*string(Params[:nbin]) * "_DP="*string(Params[:depthPercentile]) * "_binParam="*string(Params[:binParam]) * "_n="*string(bin_n) * "_long_output="*string(Params[:long_output]) * "_VACUUM" * ".csv"
    CSV.write(joinpath(Params[:output_dir],"clean_masks",saveStr),binned_masks[bin_n])
 end
 

@@ -245,7 +245,7 @@ def getBlends(mask0, overlap_cutoff, allowBlends):
    maskCenters = mask0["lambda"]
    nm = len(mask0)
    depths = mask0["depth"]
-   widths = np.array([overlap_cutoff if (depths[i]<0.65) else (1.+(depths[i]-0.65)*4.)*overlap_cutoff for i in range(len(mask0))]) #note: this function is based on visual analysis of the plot of measured FWHM vs line depth from VALD made in measureBISandLW()
+   widths = np.array([overlap_cutoff if (depths[i]<0.65) else (1.+(depths[i]-0.65)*4.)*overlap_cutoff for i in range(len(mask0))]) #note: this function is based on visual analysis of the plot of measured FWHM vs line depth from VALD made in measureBISandLW() in measureRadialVelocity_sandbox.py
    #widths = np.array([overlap_cutoff if (depths[i]<0.6) else (1.+(depths[i]-0.6)*5.)*overlap_cutoff for i in range(len(mask0))]) #note: this function was derived from visual analysis of HWHM vs line depth in HD101501, using a "fit" mask, i.e. data-derived. this mask may contain blends, and blends seem to cause the differerence between these formulae
    rights = maskCenters*(1.+widths)
    lefts = maskCenters*(1.-widths)
@@ -267,6 +267,29 @@ def getBlends(mask0, overlap_cutoff, allowBlends):
    return olisBoolean, nOverlap
 
 
+
+#blend rejection function
+def getBlendsFromFactors(mask0, blend_RV_cutoff):
+   """
+   Find mask entries below the threshold blend_RV_cutoff, and construct a boolean array telling is which lines to keep based on the specified cutoff.
+
+   Parameters:
+      mask0 (pandas.DataFrame): line list which must contain field "blend_RV_factor"
+
+      blend_RV_cutoff (float): threshold for line to be included in line list, expressed in m/s per K
+
+   """
+   assert isinstance(mask0, pd.DataFrame)
+   assert isinstance(blend_RV_cutoff, float)
+   nm = len(mask0)
+   blend_RV_factors = mask0["blend_RV_factor"]
+   olisBoolean = np.zeros(nm,dtype=bool)
+   for i in range(nm):
+      olisBoolean[i] = abs(blend_RV_factors[i]) < blend_RV_cutoff
+   
+   return olisBoolean
+
+
 def getTelluricIndices(mask, maskWavelengthsAreVacuum, overlap_cutoff, vel_slope_threshold=2000.0, RV_offset = 0.0, RV_range = 1e-4):
    # telluric_RV_threshold is the Earth's barycentric velocity as a fraction of speed of the light - to be added to overlap_cutoff for stars other than the sun, can be set to 0 for the sun
    fname = 'inputs/Telluric_Rejection/telluric_waves_'+str(vel_slope_threshold)+'.npy'
@@ -282,9 +305,10 @@ def getTelluricIndices(mask, maskWavelengthsAreVacuum, overlap_cutoff, vel_slope
       telluric_indices = np.where((abs(dD_dV)>vel_slope_threshold) | (X[:,1][1:] < 0.1))[0] #where slope is significant or telluric line is saturated
       """
       #plot tellurics - commented out as this segement is only used in debugging
+      Y = telluric_indices
       clf()
       plot(X[:,0]*10.,X[:,1], color='brown', label='Telluric Spectrum')
-      plot(X[:,0][Y]*10.,X[:,1][Y],'b.', label='Slope > '+str(+slope_threshold))
+      plot(X[:,0][Y]*10.,X[:,1][Y],'b.', label='Slope > '+str(+vel_slope_threshold))
       xlabel(r'Wavelength ($\AA$)', size=20)
       ylabel('Normalized Flux', size=20)
       title('Telluric Rejection based on Slope Criteria', size=15)
@@ -363,11 +387,13 @@ def hasMaskMatch(mask, maskWavelengthsAreVacuum, line_width=1e-5, mask_name='G2.
 
 
 #Use a VALD line list to make an RV line list. Note the output is converted to vacuum wavelengths by default.
-def getVALDmasks(lineprops=lineprops_G2, iron1Only='all', overlap_cutoff=1e-5, depth_cutoff=0.05, maskWavelengths = 'Reiners', allowBlends=0, rejectTelluricSlope=0.0, badLineFilter='none', outputVacuumWavelengths=True, saveMasks=False, outdir_masks = outdir_masks):
+def getVALDmasks(lineprops=lineprops_G2, iron1Only='all', blend_RV_factors_filename="blend_factors_0.001.csv", blend_RV_cutoff=2.0, overlap_cutoff=1e-5, depth_cutoff=0.05, maskWavelengths = 'Reiners', allowBlends=0, rejectTelluricSlope=0.0, badLineFilter='none', outputVacuumWavelengths=True, saveMasks=False, outdir_masks = outdir_masks):
    #lineprops are lambdas, excitation energies, oscillator strengths, and depths
    """
    lineprops=lineprops_G2
    iron1Only='all'
+   blend_RV_factors_filename="blend_factors_0.001.csv"
+   blend_RV_cutoff=2.0
    overlap_cutoff=1e-5
    depth_cutoff=0.05
    maskWavelengths='Reiners'
@@ -390,6 +416,7 @@ def getVALDmasks(lineprops=lineprops_G2, iron1Only='all', overlap_cutoff=1e-5, d
    lineprops["bool_filter_depth_cutoff"] = np.ones(len(lineprops), bool)
    lineprops["blend_number"] = np.zeros(len(lineprops), int)
    lineprops["bool_filter_allowBlends"] = np.ones(len(lineprops), bool)
+   lineprops["bool_filter_blend_factors"] = np.ones(len(lineprops), bool)
    lineprops["bool_filter_iron1Only"] = np.ones(len(lineprops), bool)
    lineprops["bool_filter_rejectTelluricSlope"] = np.ones(len(lineprops), bool)
    lineprops["bool_filter_badLineFilter"] = np.ones(len(lineprops), bool)
@@ -402,20 +429,25 @@ def getVALDmasks(lineprops=lineprops_G2, iron1Only='all', overlap_cutoff=1e-5, d
 
    #start the mask from lineprops
    mask = lineprops[["lambda","depth"]].copy(deep=True)
-   mask_depth_filtered = mask.loc[lineprops["bool_filter_depth_cutoff"]].reset_index(drop=True) #this is only for use in getBlends
 
    #trim mask to only include non-overlapping lines
+   if os.path.isfile("inputs/blend_factors/"+blend_RV_factors_filename):
+      #use the calculated blend_RV_factors to determine if a line's blended neighbors are significant
+      print("Found blend_factors file. Using calculated blend RV factors to filter line list.")
+      blend_factors = pd.read_table(os.path.join("inputs","blend_factors", blend_RV_factors_filename),delimiter=',', engine="python")
+      lineprops["blend_RV_factor"] = np.NaN
+      lineprops.loc[blend_factors["VALD_index"].values, "blend_RV_factor"] = blend_factors["blend_RV_factor"].values
+      lineprops.loc[:, "bool_filter_blend_factors"] = getBlendsFromFactors(lineprops, blend_RV_cutoff)
+   
+   # use the overlap_cutoff parameter
    # this intentionally happens after the depth filtering, so depth_cutoff is assumed to be small enough such that lines with lesser depths are insignifciant contributors to blends
    # this necessarily happens before any other filtering, since other filters could remove part of a blend
+   mask_depth_filtered = mask.loc[lineprops["bool_filter_depth_cutoff"]].reset_index(drop=True) #this is only for use in getBlends
    olisBoolean, nOverlap = getBlends(mask_depth_filtered, overlap_cutoff, allowBlends)
-
    #update lineprops with blend numbers. blend_number=-1 is assigned to lines not considered because they have depth below depth_cutoff
    lineprops.loc[~lineprops["bool_filter_depth_cutoff"], "blend_number"] = -1
    lineprops.loc[lineprops["bool_filter_depth_cutoff"], "blend_number"] = nOverlap
-
    #apply allowBlends filter
-   #mask0 = mask0[olisBoolean]
-   #lineprops = lineprops[olisBoolean]
    lineprops.loc[~lineprops["bool_filter_depth_cutoff"], "bool_filter_allowBlends"] = False
    lineprops.loc[lineprops["bool_filter_depth_cutoff"], "bool_filter_allowBlends"] = olisBoolean
 
@@ -536,7 +568,7 @@ def getVALDmasks(lineprops=lineprops_G2, iron1Only='all', overlap_cutoff=1e-5, d
    mask_out = mask_filtered.iloc[np.argsort(mask_filtered["lambda"])].reset_index(drop=True) #sort masks by wavelength
    mask_long_out = lineprops.iloc[np.argsort(lineprops["lambda"])] #sort masks by wavelength
    if saveMasks:
-      saveStr = 'VALD'+'_species='+iron1Only+'_depthcutoff='+str(depth_cutoff)+'_overlapcutoff='+str(overlap_cutoff)+'_allowBlends='+(','.join(str(j) for j in allowBlends) if isinstance(allowBlends,list) else str(allowBlends))+'_badLineFilter='+badLineFilter+'_rejectTelluricSlope='+str(rejectTelluricSlope)+'_waves='+maskWavelengths+("_VACUUM" if outputVacuumWavelengths else "_AIR")
+      saveStr = 'VALD'+'_species='+iron1Only+'_depthcutoff='+str(depth_cutoff)+'_blend_RV_cutoff='+(str(blend_RV_cutoff) if len(blend_RV_factors_filename)>0 else '0')+'_overlapcutoff='+str(overlap_cutoff)+'_allowBlends='+(','.join(str(j) for j in allowBlends) if isinstance(allowBlends,list) else str(allowBlends))+'_badLineFilter='+badLineFilter+'_rejectTelluricSlope='+str(rejectTelluricSlope)+'_waves='+maskWavelengths+("_VACUUM" if outputVacuumWavelengths else "_AIR")
       np.savetxt(os.path.join(outdir_masks, saveStr + '.mas'), mask_out)
       np.savetxt(os.path.join(outdir_masks, saveStr + '_long.mas'), mask_long_out)
       #np.save(os.path.join(outdir_bins, saveStr + '.npy'), lineprops[binParam].iloc[bins[i]])

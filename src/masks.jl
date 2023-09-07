@@ -185,6 +185,83 @@ function mask_intersection(mask1::DataFrame, mask2::DataFrame; default_data::Str
    return sort(sub_mask_out,[:lambda])
 end
 
+#take the intersection of two masks (pandas 2d dataframes) to generate one sub_mask
+function match_VALD_to_empirical(empirical_mask::DataFrame, VALD_mask::DataFrame; add_label_column::Bool=false, combine_mask_data::Bool=true, threshold::Number=500.0)
+   """
+   Take an empirical mask, and find nearby VALD matches. They are considered a match wavelengths (lambdas) within threshold (500 m/s by default) of each other.
+
+   Parameters:
+      empirical_mask: empirical mask including column for lambda
+
+      VALD_mask: VALD mask including column for lambda and depth
+
+      add_label_column: whether or not to add a column, "mask_df_name", to the output supermask containing labels "empirical_mask" and "VALD_mask" tracking which input mask each output mask entry originated from.
+
+      combine_mask_data: whether or not to add extra data in VALD_mask to empirical_mask
+
+      threshold: velocity (in m/s) separation between adjacent mask entries for them to be considered a match.
+
+   Returns:
+      sub_mask: intersection of empirical_mask and VALD_mask, sorted by lambda
+   """
+
+   @assert (("lambda" in names(empirical_mask)) && ("lambda" in names(VALD_mask))) "ERROR: lambda column not found."
+   empirical_mask_sorted = sort(empirical_mask,[:lambda])
+   VALD_mask_sorted = sort(VALD_mask,[:lambda])
+   empirical_mask_sorted[!,"mask_df_name"] .= "empirical_mask"
+   VALD_mask_sorted[!,"mask_df_name"] .= "VALD_mask"
+   sub_mask = DataFrame()
+   #masks_combined = vcat(empirical_mask_sorted,VALD_mask_sorted, cols=:union)
+   #mask12sorted = sort(mask12combined, [:lambda])
+   #m12 = mask12sorted[!,:lambda]
+   j0=1
+   j=1
+   for i in 1:size(empirical_mask)[1]
+      j=findfirst(wave_equal.(VALD_mask_sorted[j0:end,:lambda],empirical_mask_sorted[i,:lambda],threshold=threshold))
+      if ~isnothing(j)
+         j += j0 - 1
+         j0 = j
+         match_j = [j]
+         while wave_equal(VALD_mask_sorted[j+1,:lambda],empirical_mask_sorted[i,:lambda],threshold=threshold)
+            append!(match_j,j+1)
+            j+=1
+         end
+         matches = VALD_mask_sorted[match_j,:]
+         empirical_line = DataFrame(empirical_mask_sorted[[i],:])
+         max_depth_VALD_match = DataFrame(matches[findmax(matches[:,:depth])[2],:])
+         if combine_mask_data
+            for k in names(VALD_mask)
+               if ~(k in names(empirical_line))
+                  empirical_line[!,k] .= max_depth_VALD_match[1,k]
+               end
+            end
+         end
+         append!(sub_mask,empirical_line)
+      end
+   end
+   if add_label_column
+      sub_mask_out = sub_mask
+   else
+      sub_mask_out = select!(sub_mask, Not([:mask_df_name]))
+   end
+   sub_mask_out = sort(sub_mask_out,[:lambda])
+   #remove duplicate mask entries due to the same empirical line showing up on multiple orders
+   mask_out = DataFrame()
+   i0=1
+   i1=i0+1
+   while i0 <= size(sub_mask_out)[1]
+      while (i1 <= size(sub_mask_out)[1]) && wave_equal(sub_mask_out[i0,:lambda], sub_mask_out[i1,:lambda], threshold=threshold)
+         i1+=1
+      end
+      matches = DataFrame(sub_mask_out[i0:i1-1,:])
+      min_var_match = DataFrame(matches[findmin(matches[:,:mean_template_var])[2],:])
+      append!(mask_out,min_var_match)
+      i0=i1
+   end
+   return sort(mask_out,[:lambda])
+end
+
+
 
 #this function was translated by ChatGPT from the function of the same name in make_VALD_line_list.py, and then edited to resolve errors
 function airVacuumConversion(w; toAir=true)
