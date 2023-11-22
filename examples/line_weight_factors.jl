@@ -1,7 +1,13 @@
 #line weight factors.jl
 
-using CSV, DataFrames, QuadGK
 
+using CSV, DataFrames, QuadGK, RvLineList
+
+#This code must be run in pkgdir(RvLineList) for it to find the necessary files to run, so we change directory to there.
+local_dir = pkgdir(RvLineList)
+cd(local_dir)
+
+#some constants
 C_m_s = 2.99792458e8 #speed of light in m/s
 line_width_sigma = C_m_s * 1e-5 #guassian sigma factor for line width in m/s
 
@@ -160,13 +166,15 @@ function ΔRV(index_center::Int64, VALD_data::DataFrame, T_form_data::DataFrame)
       return missing, nn, nd
    end
    integral_numerator, err_numerator = quadgk(λ -> numerator0(λ, λ0, D0, ϵ, T_form), λ_center - Δλ, λ_center + Δλ)
-   if err_numerator > 0.01 * abs(integral_numerator)
-      printn("Warning: numerical integral error is greater than 1% for index ", index_center)
+   if abs(integral_numerator) < 1e-14 #if this is the case, then the numerator is essentially zero
+      integral_numerator = 0.0
+   elseif err_numerator > 0.01 * abs(integral_numerator)
+      println("Warning: numerical integral error is greater than 1% for index ", index_center)
    end
    #println("numerator integral result: ", integral_numerator, ", ", err_numerator)
    integral_denominator, err_denominator = quadgk(λ -> denominator0(λ, λ0, D0), λ_center - Δλ, λ_center + Δλ)
    if err_denominator > 0.01 * abs(integral_denominator)
-      printn("Warning: numerical integral error is greater than 1% for index ", index_center)
+      println("Warning: numerical integral error is greater than 1% for index ", index_center)
    end
    #println("denominator integral result: ", integral_denominator, ", ", err_denominator)
    return C_m_s * integral_numerator / integral_denominator, nn, nd
@@ -200,13 +208,15 @@ function ΔRV_simple(index_center::Int64, VALD_data::DataFrame, T_form_data::Dat
       return missing, nn, nd
    end
    integral_numerator, err_numerator = quadgk(λ -> numerator0_simple(λ, λ0, D0, ϵ, T_form, new_index_center), λ_center - Δλ, λ_center + Δλ)
-   if err_numerator > 0.01 * abs(integral_numerator)
-      printn("Warning: numerical integral error is greater than 1% for index ", index_center)
+   if abs(integral_numerator) < 1e-14 #if this is the case, then the numerator is essentially zero
+      integral_numerator = 0.0
+   elseif err_numerator > 0.01 * abs(integral_numerator)
+      println("Warning: numerical integral error is greater than 1% for index ", index_center)
    end
    #println("numerator integral result: ", integral_numerator, ", ", err_numerator)
    integral_denominator, err_denominator = quadgk(λ -> denominator0(λ, λ0, D0), λ_center - Δλ, λ_center + Δλ)
    if err_denominator > 0.01 * abs(integral_denominator)
-      printn("Warning: numerical integral error is greater than 1% for index ", index_center)
+      println("Warning: numerical integral error is greater than 1% for index ", index_center)
    end
    #println("denominator integral result: ", integral_denominator, ", ", err_denominator)
    return C_m_s * integral_numerator / integral_denominator, nn, nd
