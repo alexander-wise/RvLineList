@@ -354,7 +354,9 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       if params[:inst] == :expres
          all_spectra = EXPRES_read_spectra(data_path) #note this is in expres_old.jl and needs to be loaded manually for now. Also this uses data_path and max_spectra_to_use param (not included in params_to_check since this is deprecated)
       elseif params[:inst] == :neid
-         all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100))
+         #all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100))
+         #all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2022,06,10), nBest=100))
+         all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2022,12,26), endDate=Date(2024,06,30), nBest=100))
       else
          print("Error: spectra failed to load; inst not supported.")
       end
@@ -407,8 +409,13 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       @time lines_in_template = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=params[:line_width_50],min_deriv2=0.5, use_logλ=true, use_logflux=false), verbose=false)  # TODO: Automate threshold for finding a line
       match_bad_wavelength_intervals_with_lines!(lines_in_template, neg_wavelength_intervals, cl, col_name = :neg_bad_line)
       match_bad_wavelength_intervals_with_lines!(lines_in_template, nan_wavelength_intervals, cl, col_name = :nan_bad_line)
+      if verbose println("# Found " * string(nrow(lines_in_template)) * " lines.") end
 
+      if  params[:rejectTelluricSlope] > 0 
       too_close_to_telluric = getTelluricIndices(lines_in_template, wavelengths_are_vacuum, params[:overlap_cutoff], vel_slope_threshold = params[:rejectTelluricSlope], RV_offset = 0.0, RV_range = 1e-4)
+      else
+      too_close_to_telluric = falses(size(lines_in_template,1))
+      end
       lines_in_template[!, :rejectTelluricSlope] = too_close_to_telluric
 
       @assert (eltype(lines_in_template[!, :neg_bad_line]) == Bool) && (eltype(lines_in_template[!, :nan_bad_line]) == Bool) && (eltype(too_close_to_telluric) == Bool) #make sure these are Booleans so the next line is valid
@@ -420,6 +427,14 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
 
       if verbose println("# Fitting uncontaminated lines in all spectra.")  end
       @time fits_to_lines = RvSpectML.LineFinder.fit_all_lines_in_chunklist_timeseries(order_list_timeseries, lines_to_fit )
+      #get original chunk_ids / pixels to output with fits_to_lines
+      fits_to_lines[!,:fits_chunk_id] = zeros(Int,size(fits_to_lines)[1])
+      fits_to_lines[!,:fits_pixels] = fill(1:1,size(fits_to_lines)[1])
+      for i in 1:size(fits_to_lines)[1]
+         original_chunk_id, original_pixels = get_original_pixels(order_list_timeseries, fits_to_lines[i,:obs_idx], fits_to_lines[i,:chunk_id], fits_to_lines[i,:pixels])
+         fits_to_lines[i,:fits_chunk_id] = original_chunk_id
+         fits_to_lines[i,:fits_pixels] = original_pixels
+      end
       #@time line_RVs = fit_all_line_RVs_in_chunklist_timeseries(order_list_timeseries, template_linear_interp, template_deriv_linear_interp, lines_in_template )
    
       if save_data(pipeline_plan,:fit_lines)
@@ -446,11 +461,24 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
    df_total[!,:bool_filter_nan_bad_line] = .~lines_in_template[:, :nan_bad_line]
    df_total[!,:bool_filter_rejectTelluricSlope] = .~lines_in_template[:, :rejectTelluricSlope]
 
+   #calculate mean template variance for each line
+   df_total[!,:mean_template_var] = zeros(size(df_total)[1])
+   for i in 1:size(df_total)[1]
+      df_total[i,:mean_template_var] = mean(cl[lines_in_template[i,:chunk_id]].var[lines_in_template[i,:pixels]])
+   end
+
+   
    return df_total
 
 end #end function generateEmpiricalMask()
 
-
+#get original pixels from a view of clt
+function get_original_pixels(clt, obs_idx, chunk_id, pixels)
+   parent_indices = clt[obs_idx].data[chunk_id].flux.indices
+   parent_chunk_id = parent_indices[2]
+   parent_pixels = parent_indices[1][1] .+ pixels
+   return parent_chunk_id, parent_pixels
+end
 
 #original author: Eric Ford
 #adapted from: RvSpectML.jl/examples/expres_analyze_line_by_line.jl
@@ -681,7 +709,7 @@ function getTelluricIndices(mask, maskWavelengthsAreVacuum, overlap_cutoff; vel_
       dD = X[2:end,2] - X[1:end-1,2] #change in depth between adjacent pixels
       dV = (X[2:end,1] - X[1:end-1,1]) ./ X[1:end-1,1] #change in velocity between adjacent pixels
       dD_dV = dD ./ dV #change in depth with respect to velocity
-      telluric_indices = findall((abs.(dD_dV) .> vel_slope_threshold) .| (X[2:end,2] .< 0.1)) #where slope is significant or telluric line is saturated
+      telluric_indices = findall((abs.(dD_dV) .> vel_slope_threshold) .| (X[2:end,2] .< 0.7)) #where slope is significant or telluric line is deep
       
       npzwrite(fname, X[telluric_indices,1])
       telluric_waves = npzread(fname)*10.0 #the *10.0 converts from nm to Angstroms
