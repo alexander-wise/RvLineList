@@ -229,6 +229,12 @@ mask = combined_mask_df_filtered
 
 mask.weight = mask.depth
 
+if false  # For debugging purposes
+   local bin_n = 0
+   local saveStr = "RvLineList" * "_allowBlends="*string(Params[:allowBlends]) * "_overlapCutoff="*string(Params[:overlap_cutoff]) * "_blend_RV_cutoff=" * (length(Params[:blend_RV_factors_filename])>0 ? string(Params[:blend_RV_cutoff]) : "0") * "_depthCutoff="*string(Params[:depth_cutoff]) * "_rejectTelluricSlope="*string(Params[:rejectTelluricSlope]) * "_badLineFilter="*Params[:badLineFilter]* "_quant="*Params[:quant] * "_nbin="*string(Params[:nbin]) * "_DP="*string(Params[:depthPercentile]) * "_binParam="*string(Params[:binParam]) * "_n="*string(bin_n) * "_long_output="*string(Params[:long_output]) * "_VACUUM" * ".csv"
+  CSV.write(joinpath(Params[:output_dir],"clean_masks",saveStr),mask)
+else
+
 #binned_masks = binMask(rename(mask,[:lambda,:weight]), nbin, binParam=:weight)
 binned_masks = binMask(mask, Params[:nbin], binParam=Params[:binParam])
 #rename!(binned_masks[1], [:lambda, :depth])
@@ -237,6 +243,8 @@ for bin_n in 1:Params[:nbin]
    saveStr = "RvLineList" * "_allowBlends="*string(Params[:allowBlends]) * "_overlapCutoff="*string(Params[:overlap_cutoff]) * "_blend_RV_cutoff=" * (length(Params[:blend_RV_factors_filename])>0 ? string(Params[:blend_RV_cutoff]) : "0") * "_depthCutoff="*string(Params[:depth_cutoff]) * "_rejectTelluricSlope="*string(Params[:rejectTelluricSlope]) * "_badLineFilter="*Params[:badLineFilter]* "_quant="*Params[:quant] * "_nbin="*string(Params[:nbin]) * "_DP="*string(Params[:depthPercentile]) * "_binParam="*string(Params[:binParam]) * "_n="*string(bin_n) * "_long_output="*string(Params[:long_output]) * "_VACUUM" * ".csv"
    CSV.write(joinpath(Params[:output_dir],"clean_masks",saveStr),binned_masks[bin_n])
 end
+end
+
 
 #julia --project=RvSpectML/RvLineList RvSpectML/RvLineList/examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=1e-5 --rejectTelluricSlope=2000 --badLineFilter="none", --nbin=1 --output_dir="/home/awise/Desktop/neid_masks"
 
@@ -247,7 +255,7 @@ end
 #julia --project=RvSpectML/RvLineList RvSpectML/RvLineList/examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=2e-5 --rejectTelluricSlope=2000 --badLineFilter="ESPRESSOG2", --nbin=1 --output_dir="/home/awise/Desktop/neid_masks"
 
 
-"""
+commented_out = """
 
 mask1 = RvLineList.read_mask_air(joinpath(pkgdir(RvLineList),"inputs","ESPRESSO_masks","G2.espresso.mas"))
 mask2 = RvLineList.read_mask(joinpath("/home/awise/Desktop/neid_masks/clean_masks","RvLineList_allowBlends=0_overlapcutoff=2.0e-5_rejectTelluricSlope=2000.0_badLineFilter=none,_quant=90_nbin=1_DP=true_binParam=depth_n=1_long_output=false_VACUUM.csv"))
