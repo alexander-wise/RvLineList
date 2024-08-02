@@ -35,7 +35,7 @@ julia --project=. examples/NEID_test_script.jl --allowBlends=0 --overlap_cutoff=
 
 RvLineList creates four subdirectories in your **output_dir**. These are **clean_masks**, **linefinder**, **VALD_masks**, and **mask_bins**. The final results are stored in **output_dir/clean_masks**, and intermediate products are stored in the other directories.
 
-# clean_masks
+## clean_masks
 
 The final output mask of RvLineList, in either **default** or **long_output** format. Long_output contains additional columns with line parameters from VALD or computed by RvLineList to determine mask membership.
 
@@ -45,19 +45,19 @@ To generate an input VALD line list, navigate in a web browser to http://vald.as
 
 The VALD "extract stellar" parameters used for VALD-Solar-0.01.txt:
 
-Starting Wavelength: 3000
-Ending Wavelength: 10000
-Detection Threshold: 0.001
-Microturbulence: 1.0
-Teff: 5778
-log g: 4.44
-Chemical composition: Fe: -4.54
-Extraction format: Short format
-Retrieve data via: FTP
-Hyperfine structure: unchecked
-Require lines to have a known value of: all unchecked
-Linelist configuration: default
-Unit selection: Energy unit: eV - Medium: air - Wavelength unit: angstrom - VdW syntax: default
+* Starting Wavelength: 3000
+* Ending Wavelength: 10000
+* Detection Threshold: 0.001
+* Microturbulence: 1.0
+* Teff: 5778
+* log g: 4.44
+* Chemical composition: Fe: -4.54
+* Extraction format: Short format
+* Retrieve data via: FTP
+* Hyperfine structure: unchecked
+* Require lines to have a known value of: all unchecked
+* Linelist configuration: default
+* Unit selection: Energy unit: eV - Medium: air - Wavelength unit: angstrom - VdW syntax: default
 
 For line depths down to 0.001 instead of 0.01, it seemed the file sizes were too large for VALD to handle, so my requests were not working for the full 3000-10000 angstrom range, but they worked for the following wavelength ranges: [(3000,4000), (4000,6000), (6000,9000), (9000,10000)]. Using these VALD output files, I manually copy/pasted the data lines from each file to combine them into one file. The original VALD request results were stored in inputs/VALD_extract_stellar/VALD-Solar-0.001-files, and the final merged file is inputs/VALD_extract_stellar/VALD-solar-0.001-merged.txt.
 
