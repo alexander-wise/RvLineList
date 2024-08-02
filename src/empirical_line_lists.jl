@@ -354,7 +354,9 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       if params[:inst] == :expres
          all_spectra = EXPRES_read_spectra(data_path) #note this is in expres_old.jl and needs to be loaded manually for now. Also this uses data_path and max_spectra_to_use param (not included in params_to_check since this is deprecated)
       elseif params[:inst] == :neid
-         all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100))
+         #all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2021,09,30), nBest=100))
+         #all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2021,01,01), endDate=Date(2022,06,10), nBest=100))
+         all_spectra = combine_NEID_daily_obs(params[:daily_ccfs_base_path], params[:daily_ccf_fn], params[:daily_manifests_base_path], params[:daily_manifest_fn], get_NEID_best_days(params[:pipeline_output_summary_path],startDate=Date(2022,12,26), endDate=Date(2024,06,30), nBest=100))
       else
          print("Error: spectra failed to load; inst not supported.")
       end
@@ -407,8 +409,13 @@ function generateEmpiricalMask(params::Dict{Symbol,Any} ; output_dir::String=par
       @time lines_in_template = RvSpectML.LineFinder.find_lines_in_chunklist(cl, plan=RvSpectML.LineFinder.LineFinderPlan(line_width=params[:line_width_50],min_deriv2=0.5, use_logλ=true, use_logflux=false), verbose=false)  # TODO: Automate threshold for finding a line
       match_bad_wavelength_intervals_with_lines!(lines_in_template, neg_wavelength_intervals, cl, col_name = :neg_bad_line)
       match_bad_wavelength_intervals_with_lines!(lines_in_template, nan_wavelength_intervals, cl, col_name = :nan_bad_line)
+      if verbose println("# Found " * string(nrow(lines_in_template)) * " lines.") end
 
+      if  params[:rejectTelluricSlope] > 0 
       too_close_to_telluric = getTelluricIndices(lines_in_template, wavelengths_are_vacuum, params[:overlap_cutoff], vel_slope_threshold = params[:rejectTelluricSlope], RV_offset = 0.0, RV_range = 1e-4)
+      else
+      too_close_to_telluric = falses(size(lines_in_template,1))
+      end
       lines_in_template[!, :rejectTelluricSlope] = too_close_to_telluric
 
       @assert (eltype(lines_in_template[!, :neg_bad_line]) == Bool) && (eltype(lines_in_template[!, :nan_bad_line]) == Bool) && (eltype(too_close_to_telluric) == Bool) #make sure these are Booleans so the next line is valid

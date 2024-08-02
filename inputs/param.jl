@@ -30,13 +30,19 @@ path_params = Dict(
 #:pipeline_output_summary_path => "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso/summary_espressoG2_norm=blaze&mask=1.csv",
 #:pipeline_output_summary_path => "/home/awise/data/neid/solar/summary_1.csv",
 
-:pipeline_output_summary_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/summary_espressoG2_norm=blaze&mask=1.csv" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/summary_espressoG2_norm=cont&mask=3.csv",
+#:pipeline_output_summary_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/summary_espressoG2_norm=blaze&mask=1.csv" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/summary_espressoG2_norm=cont&mask=3.csv",
+#:pipeline_output_summary_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/summary_espressoG2_norm=blaze&mask=1.csv" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.2/outputs/ebf11/Espresso_cont3/summary_espressoG2_norm=cont&mask=3.csv",
+:pipeline_output_summary_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/summary_espressoG2_norm=blaze&mask=1.csv" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.3/outputs/ebf11/Espresso_cont3/summary_espressoG2_norm=cont&mask=3.csv",
 
-:daily_ccfs_base_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/",
+#:daily_ccfs_base_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/outputs/ebf11/Espresso_cont3/",
+#:daily_ccfs_base_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.2/outputs/ebf11/Espresso_cont3/",
+:daily_ccfs_base_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.3/outputs/ebf11/Espresso_cont3/",
 #:daily_ccf_fn => "daily_ccfs_1.jld2",
 :daily_ccf_fn => "daily_ccfs_espressoG2_norm=cont&mask=3.jld2",
 
-:daily_manifests_base_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/manifest",
+#:daily_manifests_base_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.1/manifest",
+#:daily_manifests_base_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.2/manifest",
+:daily_manifests_base_path => (ENV["USER"]=="awise") ? "/home/awise/data/neid/solar/" : "/storage/group/ebf11/default/pipeline/neid_solar/data/v1.3/manifest",
 :daily_manifest_fn => "manifest.csv",
 
 :output_dir => joinpath(pwd(),"outputs"),
@@ -56,10 +62,12 @@ spectra_params = Dict(
 #orders_to_use = 43:72 #EXPRES excalibur range
 #orders_to_use = sort(sample(43:72,10,replace=false)) #Ten random orders from the EXPRES excalibur range
 #order_to_use = 12:83 #EXPRES all useable orders
-#orders_to_use = orders_to_use_default(NEID.NEID2D()
-#orders_to_use = orders_to_use_default(EXPRES.EXPRES2D()
-#orders_to_use = 4:118 # all NEID orders with wavelength values
-:orders_to_use => 17:115, # NEID orders with minimal NaNs in extracted orders from daily flux averages
+#orders_to_use = orders_to_use_default(NEID.NEID2D())
+#orders_to_use = orders_to_use_default(EXPRES.EXPRES2D())
+#:orders_to_use => 4:118, # all NEID orders with wavelength values
+:orders_to_use => 17:118, # NEID orders with minimal NaNs in extracted orders from daily flux averages
+#:orders_to_use => 17:115, # NEID orders with minimal NaNs in extracted orders from daily flux averages
+#:orders_to_use => 58:98, # NEID orders with minimal NaNs in extracted orders from daily flux averages
 
 :norm_type => :continuum, #normalization type. Options: :raw, :continuum, :blaze #TODO: this param might not work
 )
@@ -87,8 +95,9 @@ linelist_params = Dict(
 
 # Empirical mask params
 #:discard_neg_nan => true, #whether or not lines affected by negative / nan values should be discarded #commented out as this now happens by default
-:quant => "90", #quantile for stability of fit params for empirical masks, expressed as a string out of 100
-:min_frac_converged => "100", #minimum fraction of the line fits that converged in the dataset for the empirical line to be used, expressed as a string out of 100
+:quant => "95", #quantile for stability of fit params for empirical masks, expressed as a string out of 100
+#:min_frac_converged => "100", #minimum fraction of the line fits that converged in the dataset for the empirical line to be used, expressed as a string out of 100
+:min_frac_converged => "95", #minimum fraction of the line fits that converged in the dataset for the empirical line to be used, expressed as a string out of 100
 :line_width_50 => 7392.0, #NEID solar line width for ESPRESSO G2 mask, mask_scale_factor = 2.0, other ccf params default values
 :matching_threshold => 1000.0 #distance (in m/s) between VALD & empirical lines for them to be considered candidates for the same line
 )
