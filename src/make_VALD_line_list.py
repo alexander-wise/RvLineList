@@ -245,8 +245,9 @@ def getBlends(mask0, overlap_cutoff, allowBlends):
    maskCenters = mask0["lambda"]
    nm = len(mask0)
    depths = mask0["depth"]
-   widths = np.array([overlap_cutoff if (depths[i]<0.65) else (1.+(depths[i]-0.65)*4.)*overlap_cutoff for i in range(len(mask0))]) #note: this function is based on visual analysis of the plot of measured FWHM vs line depth from VALD made in measureBISandLW() in measureRadialVelocity_sandbox.py
+   #widths = np.array([overlap_cutoff if (depths[i]<0.65) else (1.+(depths[i]-0.65)*4.)*overlap_cutoff for i in range(len(mask0))]) #note: this function is based on visual analysis of the plot of measured FWHM vs line depth from VALD made in measureBISandLW() in measureRadialVelocity_sandbox.py
    #widths = np.array([overlap_cutoff if (depths[i]<0.6) else (1.+(depths[i]-0.6)*5.)*overlap_cutoff for i in range(len(mask0))]) #note: this function was derived from visual analysis of HWHM vs line depth in HD101501, using a "fit" mask, i.e. data-derived. this mask may contain blends, and blends seem to cause the differerence between these formulae
+   widths = np.array([overlap_cutoff for i in range(len(mask0))]) #note: an updated plot, fig3_error(), in plotting_scripts.jl, suggested having the width vary with depth was not a good idea, so I removed that part
    rights = maskCenters*(1.+widths)
    lefts = maskCenters*(1.-widths)
    nOverlap = np.zeros(nm,dtype=int)

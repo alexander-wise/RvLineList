@@ -39,11 +39,29 @@ RvLineList creates four subdirectories in your **output_dir**. These are **clean
 
 The final output mask of RvLineList, in either **default** or **long_output** format. Long_output contains additional columns with line parameters from VALD or computed by RvLineList to determine mask membership.
 
-The columns are:
+# VALD input line lists
 
-1. 1
-2. 2
-3. etc
+To generate an input VALD line list, navigate in a web browser to http://vald.astro.uu.se/, login (you may need to create an account), and click "Extract Stellar".
+
+The VALD "extract stellar" parameters used for VALD-Solar-0.01.txt:
+
+* Starting Wavelength: 3000
+* Ending Wavelength: 10000
+* Detection Threshold: 0.001
+* Microturbulence: 1.0
+* Teff: 5778
+* log g: 4.44
+* Chemical composition: Fe: -4.54
+* Extraction format: Short format
+* Retrieve data via: FTP
+* Hyperfine structure: unchecked
+* Require lines to have a known value of: all unchecked
+* Linelist configuration: default
+* Unit selection: Energy unit: eV - Medium: air - Wavelength unit: angstrom - VdW syntax: default
+
+For line depths down to 0.001 instead of 0.01, it seemed the file sizes were too large for VALD to handle, so my requests were not working for the full 3000-10000 angstrom range, but they worked for the following wavelength ranges: [(3000,4000), (4000,6000), (6000,9000), (9000,10000)]. Using these VALD output files, I manually copy/pasted the data lines from each file to combine them into one file. The original VALD request results were stored in inputs/VALD_extract_stellar/VALD-Solar-0.001-files, and the final merged file is inputs/VALD_extract_stellar/VALD-solar-0.001-merged.txt.
+
+
 
 ## linefinder
 
@@ -57,13 +75,13 @@ To get the line wavelengths for the mask, we fit our model to the lines in neid_
 
 ### neid_linefinder_line_RVs.csv
 
-This file contains line-by-line RVs measured on 100 NEID daily average spectra from 2021. The are not currently used elsewhere in RvLineList.
+This file contains line-by-line RVs measured on 100 NEID daily average spectra from 2021. They are not currently used elsewhere in RvLineList.
 
 ## VALD_masks
 
 The default behavior of RvLineList is to leave this empty, but if modified, the VALD-branch outputs can be output here.
 
-## mask_bines
+## mask_bins
 
 This folder used to be used to track which mask entry ended in which bin when nbins > 1, but it is not longer output, so the folder will be empty unless the user puts something there.
 
