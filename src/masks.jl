@@ -22,7 +22,7 @@ function read_mask_vacuum(fn::String)
     return df
 end
 
-""" Read mask in csv format. Filename must include the substring _AIR" or "_VACUUM" denoting wavelengths medium
+""" Read mask in csv format. Filename must include the substring "_AIR" or "_VACUUM" denoting wavelengths medium
    input: filename for mask with columns: `lambda` in vacuum and `depth`
    output: DataFrame containing the line wavlengths in vacuum and line depths
 """
